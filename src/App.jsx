@@ -209,24 +209,29 @@ function ExerciseCard({ exercise, index }) {
 // ─── WORKOUT SESSION (GAMIFICADO) ───────────────────────────────────────────
 function WorkoutSession({ exercises, clientId, onComplete, onCancel }) {
   const [exIdx, setExIdx] = useState(0);
-  const [setsDone, setSetsDone] = useState({});
+  const [phasesDone, setPhasesDone] = useState({}); // { ex.id: phasesCompleted }
   const [weights, setWeights] = useState({});
   const [resting, setResting] = useState(false);
   const [restTime, setRestTime] = useState(0);
   const [saving, setSaving] = useState(false);
-  const [customSets, setCustomSets] = useState({});
   const [nextExScreen, setNextExScreen] = useState(false);
   const startTime = useRef(Date.now());
 
   const ex = exercises[exIdx];
   if (!ex) return null;
 
-  const totalSets = customSets[ex.id] || parseInt(ex.sets) || 3;
-  const doneSets = setsDone[ex.id] || 0;
+  // Support old format (sets/reps) or new format (phases)
+  const phases = ex.phases && ex.phases.length > 0
+    ? ex.phases.filter(p => p.peso || p.reps)
+    : [{ peso: '', reps: ex.reps || '8-12', descanso: ex.rest || 60 }];
+
+  const totalPhases = phases.length;
+  const donePhases = phasesDone[ex.id] || 0;
+  const currentPhase = phases[donePhases];
   const totalExercises = exercises.length;
   const exProgress = exIdx + 1;
   const progressPct = Math.round((exProgress / totalExercises) * 100);
-  const allExDone = exercises.every(e => (setsDone[e.id] || 0) >= (customSets[e.id] || parseInt(e.sets) || 3));
+  const allExDone = exercises.every(e => (phasesDone[e.id] || 0) >= (e.phases?.filter(p => p.peso || p.reps).length || 1));
 
   const getMotivationalMessage = () => {
     if (progressPct === 100) return '¡CASI LISTO! 🔥 Une última cosa...';
@@ -236,11 +241,12 @@ function WorkoutSession({ exercises, clientId, onComplete, onCancel }) {
     return '¡Dale! 💪 Vamos a quemar';
   };
 
-  const completeSet = () => {
-    const nd = { ...setsDone, [ex.id]: doneSets + 1 };
-    setSetsDone(nd);
-    if (doneSets + 1 < totalSets) {
-      setRestTime(ex.rest || 60);
+  const completePhase = () => {
+    const nextPhases = donePhases + 1;
+    setPhasesDone({ ...phasesDone, [ex.id]: nextPhases });
+    if (nextPhases < totalPhases) {
+      const nextRestTime = parseInt(phases[nextPhases].descanso) || 60;
+      setRestTime(nextRestTime);
       setResting(true);
     } else if (exIdx < exercises.length - 1) {
       setNextExScreen(true);
@@ -303,25 +309,35 @@ function WorkoutSession({ exercises, clientId, onComplete, onCancel }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
           <div>
             <div style={{ ...s.label, marginBottom: 4 }}>Ejercicio {exProgress} de {totalExercises}</div>
-            <div className="bebas" style={{ fontSize: 26, color: ACCENT }}>{ex.name}</div>
+            <div className="bebas" style={{ fontSize: 26, color: ACCENT }}>
+              {ex.type && ex.type !== 'normal' ? (
+                <>
+                  {ex.type === 'dropset' && '💧 '}
+                  {ex.type === 'pyramid' && '🔺 '}
+                  {ex.type === 'superset' && '🔗 '}
+                  {ex.type === 'rest-pause' && '⏸️ '}
+                </>
+              ) : null}
+              {ex.name}
+            </div>
           </div>
           <div style={{ background: ACCENT + '20', borderRadius: 8, padding: '6px 12px', fontSize: 12, fontWeight: 700, color: ACCENT }}>
-            {doneSets}/{totalSets} series
+            {donePhases}/{totalPhases} fase{totalPhases > 1 ? 's' : ''}
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
-          <div><span style={{ ...s.label }}>Reps</span><div style={{ fontSize: 20, fontWeight: 800, color: ACCENT }}>{ex.reps}</div></div>
-          <div><span style={{ ...s.label }}>Descanso</span><div style={{ fontSize: 20, fontWeight: 800, color: ACCENT }}>{ex.rest}s</div></div>
-          <div>
-            <span style={{ ...s.label }}>Series</span>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}>
-              <select value={totalSets} onChange={e => setCustomSets({ ...customSets, [ex.id]: parseInt(e.target.value) })} style={{ ...s.input, width: 60, padding: '6px 8px', fontSize: 14 }}>
-                {[1, 2, 3, 4, 5, 6].map(n => <option key={n} value={n}>{n}</option>)}
-              </select>
+        {currentPhase && (
+          <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
+            {currentPhase.peso && <div><span style={{ ...s.label }}>Peso</span><div style={{ fontSize: 20, fontWeight: 800, color: ACCENT }}>{currentPhase.peso}kg</div></div>}
+            <div><span style={{ ...s.label }}>Reps</span><div style={{ fontSize: 20, fontWeight: 800, color: ACCENT }}>{currentPhase.reps}</div></div>
+            <div>
+              <span style={{ ...s.label }}>Descanso</span>
+              <div style={{ fontSize: 20, fontWeight: 800, color: parseInt(currentPhase.descanso) === 0 ? '#FF6666' : ACCENT }}>
+                {parseInt(currentPhase.descanso) === 0 ? '⚡ SIN DESCANSO' : `${currentPhase.descanso}s`}
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {ex.notes && <div style={{ background: '#1A1A1A', borderRadius: 8, padding: '8px 12px', fontSize: 13, color: '#888', marginBottom: 12 }}>💡 {ex.notes}</div>}
         {ex.video && (
@@ -337,9 +353,9 @@ function WorkoutSession({ exercises, clientId, onComplete, onCancel }) {
         </div>
 
         <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 28 }}>
-          {Array.from({ length: totalSets }, (_, i) => (
-            <div key={i} style={{ width: 44, height: 44, borderRadius: 10, border: `2px solid ${i < doneSets ? ACCENT : BORDER}`, background: i < doneSets ? ACCENT + '20' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', animation: i < doneSets ? 'check-pop 0.4s ease' : 'none', lineHeight: 1 }}>
-              {i < doneSets ? <Check size={20} color={ACCENT} /> : <span style={{ fontSize: 14, fontWeight: 600, color: '#555', lineHeight: 1 }}>{i + 1}</span>}
+          {Array.from({ length: totalPhases }, (_, i) => (
+            <div key={i} style={{ width: 44, height: 44, borderRadius: 10, border: `2px solid ${i < donePhases ? ACCENT : BORDER}`, background: i < donePhases ? ACCENT + '20' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', animation: i < donePhases ? 'check-pop 0.4s ease' : 'none', lineHeight: 1 }}>
+              {i < donePhases ? <Check size={20} color={ACCENT} /> : <span style={{ fontSize: 14, fontWeight: 600, color: '#555', lineHeight: 1 }}>{i + 1}</span>}
             </div>
           ))}
         </div>
@@ -348,11 +364,15 @@ function WorkoutSession({ exercises, clientId, onComplete, onCancel }) {
           💡 Inhala en la bajada, exhala al empujar. Recorrido completo siempre.
         </div>
 
+        <div style={{ background: '#1A2A1A', border: `1px solid ${ACCENT}40`, borderRadius: 10, padding: '10px 14px', fontSize: 12, color: '#88CC00', marginBottom: 16 }}>
+          💡 Inhala en la bajada, exhala al empujar. Recorrido completo siempre.
+        </div>
+
         {resting ? (
           <RestTimer seconds={restTime} onDone={() => { setResting(false); }} />
-        ) : doneSets < totalSets ? (
-          <button style={{ ...s.btn, fontSize: 16, padding: '16px', boxShadow: `0 0 20px rgba(200,255,0,0.3)` }} onClick={completeSet}>
-            Serie {doneSets + 1} completada ✓
+        ) : donePhases < totalPhases ? (
+          <button style={{ ...s.btn, fontSize: 16, padding: '16px', boxShadow: `0 0 20px rgba(200,255,0,0.3)` }} onClick={completePhase}>
+            Fase {donePhases + 1} completada ✓
           </button>
         ) : exIdx < exercises.length - 1 ? (
           <button style={{ ...s.btn, background: ACCENT, fontSize: 16, padding: '16px' }} onClick={() => setNextExScreen(true)}>
