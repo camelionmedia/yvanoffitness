@@ -1084,16 +1084,22 @@ function RoutineBuilder({ clients, onBack }) {
                       const newCount = parseInt(e.target.value);
                       // Create exactly newCount phases
                       const phases = Array.from({ length: newCount }, () => ({ reps: '', descanso: '' }));
-                      updateExercise(activeDay, idx, 'phases', phases);
+
+                      // Update current exercise
+                      const updatedDays = { ...editing.days };
+                      updatedDays[activeDay] = [...updatedDays[activeDay]];
+                      updatedDays[activeDay][idx] = { ...updatedDays[activeDay][idx], phases };
 
                       // If this is a superset, also update linked exercise's phase count
                       if (ex.type === 'superset' && ex.linkedExerciseId) {
-                        const linkedIdx = dayExercises.findIndex(e => e.id === ex.linkedExerciseId);
+                        const linkedIdx = updatedDays[activeDay].findIndex(e => e.id === ex.linkedExerciseId);
                         if (linkedIdx !== -1) {
                           const linkedPhases = Array.from({ length: newCount }, () => ({ reps: '', descanso: '' }));
-                          updateExercise(activeDay, linkedIdx, 'phases', linkedPhases);
+                          updatedDays[activeDay][linkedIdx] = { ...updatedDays[activeDay][linkedIdx], phases: linkedPhases };
                         }
                       }
+
+                      setEditing(updatedDays);
                     }}
                     style={{ ...s.input, marginTop: 4, fontSize: 14 }}
                   >
