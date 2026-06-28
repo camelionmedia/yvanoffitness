@@ -1011,40 +1011,67 @@ function AdminPanel({ onLogout, onSwitchToTraining }) {
     return weights.length ? (weights.reduce((a, b) => a + b, 0) / weights.length).toFixed(1) : '–';
   };
 
+  const memberNames = (group) => group.clients.map(id => (clients || []).find(c => c.id === id)?.name).filter(Boolean).join(' · ');
+
   return (
     <div style={{ minHeight: '100vh', background: BG }}>
-      <div style={{ maxWidth: 700, margin: '0 auto', padding: isMobile ? '20px 16px 60px' : '32px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-          <div>
-            <div style={s.label}>Panel del coach</div>
-            <div className="bebas" style={{ fontSize: 30 }}>Yvanoff Fitness</div>
-          </div>
+      {/* Sticky top bar — respeta el notch del celular */}
+      <div style={{ position: 'sticky', top: 0, zIndex: 50, background: 'rgba(13,13,13,0.85)', backdropFilter: 'blur(12px)', borderBottom: `1px solid ${BORDER}`, paddingTop: 'env(safe-area-inset-top)' }}>
+        <div style={{ maxWidth: 700, margin: '0 auto', padding: isMobile ? '12px 16px' : '16px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+          <div className="bebas" style={{ fontSize: isMobile ? 22 : 26, color: ACCENT, letterSpacing: '0.08em' }}>YVANOFF</div>
           <div style={{ display: 'flex', gap: 8 }}>
             {onSwitchToTraining && (
-              <button onClick={onSwitchToTraining} style={{ ...s.btnGhost, padding: '8px 14px', display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
-                <Dumbbell size={15} /> Mi entrenamiento
+              <button onClick={onSwitchToTraining} style={{ ...s.btnGhost, padding: '9px 14px', display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+                <Dumbbell size={16} /> {!isMobile && 'Mi entrenamiento'}
               </button>
             )}
-            <button onClick={onLogout} style={{ background: '#1A1A1A', border: `1px solid ${BORDER}`, borderRadius: 10, padding: '8px 14px', display: 'flex', alignItems: 'center', gap: 6, color: '#888', fontSize: 13 }}>
-              <LogOut size={15} /> Salir
+            <button onClick={onLogout} style={{ background: '#1A1A1A', border: `1px solid ${BORDER}`, borderRadius: 10, padding: '9px 14px', display: 'flex', alignItems: 'center', gap: 6, color: '#888', fontSize: 13 }}>
+              <LogOut size={16} /> {!isMobile && 'Salir'}
             </button>
           </div>
         </div>
+      </div>
 
-        {/* VISTA: Grupos */}
+      <div style={{ maxWidth: 700, margin: '0 auto', padding: isMobile ? '20px 16px 80px' : '28px 32px' }}>
+
+        {/* VISTA: Grupos (dashboard) */}
         {view === 'groups' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <button onClick={() => setView('routines')} style={{ ...s.card, display: 'flex', justifyContent: 'space-between', alignItems: 'center', textAlign: 'left', color: BG, background: ACCENT, borderColor: ACCENT }}>
-              <span style={{ fontWeight: 700, fontSize: 15, display: 'flex', alignItems: 'center', gap: 8 }}><Dumbbell size={18} /> Crear / editar rutinas</span>
-              <ChevronLeft size={16} style={{ transform: 'rotate(180deg)', color: BG }} />
-            </button>
-            <div style={{ ...s.label, display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}><Users size={14} /> Mis grupos</div>
-            {Object.entries(GROUPS).map(([id, group]) => (
-              <button key={id} onClick={() => openGroup(id)} style={{ ...s.card, display: 'flex', justifyContent: 'space-between', alignItems: 'center', textAlign: 'left', color: '#fff' }}>
-                <span style={{ fontWeight: 700, fontSize: 15 }}>{group.name}</span>
-                <ChevronLeft size={16} style={{ transform: 'rotate(180deg)', color: '#666' }} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 24, animation: 'slide-up 0.3s ease' }}>
+            <div>
+              <div style={s.label}>Panel del coach</div>
+              <div className="bebas" style={{ fontSize: 32, marginTop: 2 }}>Hola, Adrián 👋</div>
+              <div style={{ fontSize: 14, color: '#888', marginTop: 4 }}>Gestioná tus rutinas y seguí el progreso de cada cliente.</div>
+            </div>
+
+            {/* Sección: Entrenamiento */}
+            <div>
+              <div style={{ ...s.label, marginBottom: 10 }}>Entrenamiento</div>
+              <button onClick={() => setView('routines')} style={{ ...s.card, width: '100%', display: 'flex', alignItems: 'center', gap: 14, textAlign: 'left', color: '#fff', background: `linear-gradient(135deg, ${ACCENT}18, ${CARD})`, borderColor: ACCENT + '40' }}>
+                <div style={{ width: 44, height: 44, borderRadius: 12, background: ACCENT, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Dumbbell size={22} color={BG} /></div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 700, fontSize: 16 }}>Rutinas</div>
+                  <div style={{ fontSize: 13, color: '#999', marginTop: 2 }}>Creá y asigná planes a tus clientes</div>
+                </div>
+                <ChevronLeft size={18} style={{ transform: 'rotate(180deg)', color: '#666' }} />
               </button>
-            ))}
+            </div>
+
+            {/* Sección: Mis clientes */}
+            <div>
+              <div style={{ ...s.label, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}><Users size={14} /> Mis clientes</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {Object.entries(GROUPS).map(([id, group]) => (
+                  <button key={id} onClick={() => openGroup(id)} style={{ ...s.card, width: '100%', display: 'flex', alignItems: 'center', gap: 14, textAlign: 'left', color: '#fff' }}>
+                    <div style={{ width: 44, height: 44, borderRadius: 12, background: '#1A1A1A', border: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 18 }}>{id === '1' ? '🌅' : '⏰'}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, fontSize: 16 }}>{group.name}</div>
+                      <div style={{ fontSize: 13, color: '#999', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{memberNames(group) || `${group.clients.length} clientes`}</div>
+                    </div>
+                    <ChevronLeft size={18} style={{ transform: 'rotate(180deg)', color: '#666' }} />
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         )}
 
@@ -1076,12 +1103,18 @@ function AdminPanel({ onLogout, onSwitchToTraining }) {
               <ChevronLeft size={16} /> Volver
             </button>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div className="bebas" style={{ fontSize: 26 }}>{selectedClient.name}</div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => setView('quick-log')} style={{ ...s.btnGhost, padding: '8px 12px', fontSize: 12 }}>⚡ Quick Log</button>
-                <button onClick={() => setView('upload-photos')} style={{ ...s.btnGhost, padding: '8px 12px', fontSize: 12 }}>📸 Fotos</button>
-              </div>
+            <div className="bebas" style={{ fontSize: 28 }}>{selectedClient.name}</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <button onClick={() => setView('quick-log')} style={{ ...s.card, padding: '14px', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4, textAlign: 'left', color: '#fff' }}>
+                <span style={{ fontSize: 20 }}>⚡</span>
+                <span style={{ fontWeight: 700, fontSize: 14 }}>Registrar entreno</span>
+                <span style={{ fontSize: 12, color: '#888' }}>Cargar pesos de hoy</span>
+              </button>
+              <button onClick={() => setView('upload-photos')} style={{ ...s.card, padding: '14px', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4, textAlign: 'left', color: '#fff' }}>
+                <span style={{ fontSize: 20 }}>📸</span>
+                <span style={{ fontWeight: 700, fontSize: 14 }}>Subir fotos</span>
+                <span style={{ fontSize: 12, color: '#888' }}>Progreso del cliente</span>
+              </button>
             </div>
 
             {logs && (
@@ -1303,7 +1336,7 @@ function StudentApp({ session, onLogout, headerExtra }) {
 
   if (inWorkout) {
     return (
-      <div style={{ minHeight: '100vh', background: BG, padding: '20px 16px 40px' }}>
+      <div style={{ minHeight: '100vh', background: BG, padding: 'max(20px, calc(env(safe-area-inset-top) + 12px)) 16px 40px' }}>
         <div style={{ maxWidth: 480, margin: '0 auto' }}>
           <div className="bebas" style={{ fontSize: 28, marginBottom: 20, color: ACCENT }}>⚡ {today} — En curso</div>
           {todayExercises.length === 0 ? (
@@ -1333,8 +1366,8 @@ function StudentApp({ session, onLogout, headerExtra }) {
       {celebration && <CelebrationModal achievement={celebration.achievement} onClose={() => { setCelebration(null); setTab('home'); }} />}
       {!isMobile && <TabBar tabs={tabs} active={tab} onChange={setTab} isMobile={false} />}
       <div style={{ flex: 1, overflowY: 'auto', paddingBottom: isMobile ? 80 : 0 }}>
-        <div style={{ maxWidth: 700, margin: '0 auto', padding: isMobile ? '20px 16px' : '32px 32px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 8 }}>
+        <div style={{ maxWidth: 700, margin: '0 auto', padding: isMobile ? '0 16px' : '32px 32px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, gap: 8, paddingTop: isMobile ? 'max(16px, calc(env(safe-area-inset-top) + 8px))' : 0 }}>
             {headerExtra}
             <button onClick={onLogout} style={{ background: '#1A1A1A', border: `1px solid ${BORDER}`, borderRadius: 10, padding: '8px 14px', display: 'flex', alignItems: 'center', gap: 6, color: '#888', fontSize: 13, marginLeft: 'auto' }}>
               <LogOut size={15} /> Salir
