@@ -43,6 +43,10 @@ const ACHIEVEMENT_DEFS = [
   { id: 'speed_runner', icon: '⚡', label: 'Velocista', desc: 'Entreno en menos de 40 min' },
 ];
 
+const MUSCLE_GROUPS = [
+  'Pecho', 'Espalda', 'Piernas', 'Bíceps', 'Tríceps', 'Hombros', 'Abdominales', 'Glúteos'
+];
+
 function getToday() { return new Date().toISOString().split('T')[0]; }
 
 // logs: array of { date: 'YYYY-MM-DD', completed, duration } sorted desc by date, completed-only
