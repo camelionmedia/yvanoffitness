@@ -1,0 +1,1174 @@
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  Dumbbell, LogOut, Check, X, Video, History, Users, Flame, ChevronLeft,
+} from 'lucide-react';
+import { supabase } from './supabase';
+
+const ADMIN_EMAIL = 'adrianyvanoff14@hotmail.com';
+
+// ─── FONT INJECTION ────────────────────────────────────────────────────────────
+const FontStyle = () => (
+  <style>{`
+    @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400;500;600;700&display=swap');
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #0D0D0D; font-family: 'Inter', sans-serif; color: #fff; }
+    ::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-track { background: #1a1a1a; }
+    ::-webkit-scrollbar-thumb { background: #C8FF00; border-radius: 2px; }
+    .bebas { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.05em; }
+    @keyframes pulse-glow { 0%,100% { box-shadow: 0 0 20px rgba(200,255,0,0.15); } 50% { box-shadow: 0 0 35px rgba(200,255,0,0.35); } }
+    @keyframes fire { 0%,100% { transform: scale(1) rotate(-2deg); } 50% { transform: scale(1.15) rotate(2deg); } }
+    @keyframes check-pop { 0% { transform: scale(0); } 60% { transform: scale(1.3); } 100% { transform: scale(1); } }
+    @keyframes slide-up { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    @keyframes confetti-fall { 0% { transform: translateY(-10px) rotate(0deg); opacity: 1; } 100% { transform: translateY(300px) rotate(720deg); opacity: 0; } }
+    @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+    .animate-slide-up { animation: slide-up 0.3s ease forwards; }
+    .animate-fade-in { animation: fade-in 0.3s ease forwards; }
+    input, textarea, select { outline: none; font-family: 'Inter', sans-serif; }
+    button { cursor: pointer; font-family: 'Inter', sans-serif; border: none; }
+  `}</style>
+);
+
+// ─── CONSTANTS ─────────────────────────────────────────────────────────────────
+const ACCENT = '#C8FF00';
+const BG = '#0D0D0D';
+const CARD = '#161616';
+const CARD2 = '#1E1E1E';
+const BORDER = '#2A2A2A';
+const DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+
+const ACHIEVEMENT_DEFS = [
+  { id: 'first_week', icon: '🔥', label: 'Primera semana', desc: '7 días de racha' },
+  { id: 'ten_sessions', icon: '💪', label: '10 entrenamientos', desc: 'Completar 10 sesiones' },
+  { id: 'thirty_days', icon: '🏆', label: 'Consistente', desc: '30 días de racha' },
+  { id: 'speed_runner', icon: '⚡', label: 'Velocista', desc: 'Entreno en menos de 40 min' },
+];
+
+function getToday() { return new Date().toISOString().split('T')[0]; }
+
+// logs: array of { date: 'YYYY-MM-DD', completed, duration } sorted desc by date, completed-only
+function calculateStreak(logs) {
+  if (!logs?.length) return 0;
+  const dates = new Set(logs.map(l => l.date));
+  let streak = 0;
+  const cursor = new Date();
+  for (let i = 0; i < 365; i++) {
+    const key = cursor.toISOString().split('T')[0];
+    if (dates.has(key)) { streak++; cursor.setDate(cursor.getDate() - 1); }
+    else if (i === 0) { cursor.setDate(cursor.getDate() - 1); } // allow "no entrenaste todavía hoy" without breaking the streak
+    else break;
+  }
+  return streak;
+}
+
+function unlockedAchievements(logs) {
+  const streak = calculateStreak(logs);
+  const sessions = logs.length;
+  const fastest = Math.min(...logs.map(l => l.duration ?? Infinity), Infinity);
+  const unlocked = [];
+  if (streak >= 7) unlocked.push('first_week');
+  if (sessions >= 10) unlocked.push('ten_sessions');
+  if (streak >= 30) unlocked.push('thirty_days');
+  if (fastest < 40) unlocked.push('speed_runner');
+  return unlocked;
+}
+
+// A routine can be assigned to several clients at once (fit_routine_assignments).
+// This resolves whichever routine is currently assigned to a given client.
+async function getClientRoutine(clientId) {
+  const { data } = await supabase
+    .from('fit_routine_assignments')
+    .select('created_at, fit_routines(*)')
+    .eq('client_id', clientId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data?.fit_routines || null;
+}
+
+// ─── UI PRIMITIVES ─────────────────────────────────────────────────────────────
+const s = {
+  card: { background: CARD, border: `1px solid ${BORDER}`, borderRadius: 16, padding: 20 },
+  card2: { background: CARD2, borderRadius: 12, padding: 16 },
+  label: { fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', color: '#666', textTransform: 'uppercase' },
+  input: { background: '#1A1A1A', border: `1px solid ${BORDER}`, borderRadius: 10, padding: '12px 16px', color: '#fff', fontSize: 15, width: '100%' },
+  btn: { background: ACCENT, color: BG, fontWeight: 700, fontSize: 15, borderRadius: 12, padding: '14px 24px', width: '100%', transition: 'opacity 0.15s', letterSpacing: '0.02em' },
+  btnGhost: { background: 'transparent', color: ACCENT, border: `1px solid ${ACCENT}`, fontWeight: 600, fontSize: 14, borderRadius: 10, padding: '10px 20px', transition: 'all 0.15s' },
+};
+
+function Pill({ label, color = ACCENT }) {
+  return <span style={{ background: color + '20', color, fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{label}</span>;
+}
+
+function EmptyState({ icon: Icon = Dumbbell, title, message }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px 24px', textAlign: 'center', gap: 16 }}>
+      <div style={{ width: 72, height: 72, borderRadius: '50%', background: '#1A1A1A', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Icon size={32} color="#444" />
+      </div>
+      <div>
+        <div className="bebas" style={{ fontSize: 22, color: '#555', marginBottom: 6 }}>{title}</div>
+        <div style={{ fontSize: 14, color: '#444', lineHeight: 1.5 }}>{message}</div>
+      </div>
+    </div>
+  );
+}
+
+// ─── CONFETTI ──────────────────────────────────────────────────────────────────
+function Confetti() {
+  const colors = [ACCENT, '#FF6B6B', '#4ECDC4', '#FFE66D', '#A8E6CF'];
+  const pieces = Array.from({ length: 40 }, (_, i) => ({
+    id: i, color: colors[i % colors.length],
+    left: Math.random() * 100, delay: Math.random() * 1.5,
+    size: Math.random() * 8 + 6,
+  }));
+  return (
+    <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', overflow: 'hidden', zIndex: 999 }}>
+      {pieces.map(p => (
+        <div key={p.id} style={{
+          position: 'absolute', top: -20, left: `${p.left}%`,
+          width: p.size, height: p.size, background: p.color, borderRadius: 2,
+          animation: `confetti-fall ${1.5 + p.delay}s ease-in ${p.delay * 0.3}s forwards`,
+        }} />
+      ))}
+    </div>
+  );
+}
+
+// ─── CELEBRATION MODAL ─────────────────────────────────────────────────────────
+function CelebrationModal({ achievement, onClose }) {
+  return (
+    <>
+      <Confetti />
+      <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 998, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+        <div style={{ ...s.card, textAlign: 'center', maxWidth: 360, width: '100%', animation: 'slide-up 0.4s ease', boxShadow: `0 0 60px rgba(200,255,0,0.25)` }}>
+          <div style={{ fontSize: 64, marginBottom: 16 }}>{achievement ? achievement.icon : '🎉'}</div>
+          <div className="bebas" style={{ fontSize: 32, color: ACCENT, marginBottom: 8 }}>
+            {achievement ? '¡LOGRO DESBLOQUEADO!' : '¡ENTRENAMIENTO COMPLETADO!'}
+          </div>
+          {achievement && <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>{achievement.label}</div>}
+          {achievement && <div style={{ color: '#888', marginBottom: 20 }}>{achievement.desc}</div>}
+          <button style={{ ...s.btn, marginTop: achievement ? 0 : 20 }} onClick={onClose}>Continuar 💪</button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ─── COUNTDOWN TIMER ───────────────────────────────────────────────────────────
+function RestTimer({ seconds, onDone }) {
+  const [remaining, setRemaining] = useState(seconds);
+  useEffect(() => {
+    if (remaining <= 0) { onDone(); return; }
+    const t = setTimeout(() => setRemaining(r => r - 1), 1000);
+    return () => clearTimeout(t);
+  }, [remaining]);
+  const pct = remaining / seconds;
+  const r = 45, circ = 2 * Math.PI * r;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '24px 0' }}>
+      <div style={{ color: '#888', fontSize: 13, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Descanso</div>
+      <svg width={120} height={120} style={{ transform: 'rotate(-90deg)' }}>
+        <circle cx={60} cy={60} r={r} fill="none" stroke={BORDER} strokeWidth={6} />
+        <circle cx={60} cy={60} r={r} fill="none" stroke={ACCENT} strokeWidth={6}
+          strokeDasharray={circ} strokeDashoffset={circ * (1 - pct)} strokeLinecap="round"
+          style={{ transition: 'stroke-dashoffset 1s linear' }} />
+        <text x={60} y={65} textAnchor="middle" fill="#fff" fontSize={28} fontWeight={700}
+          style={{ transform: 'rotate(90deg)', transformOrigin: '60px 60px', fontFamily: 'Inter' }}>
+          {remaining}
+        </text>
+      </svg>
+      <button style={{ ...s.btnGhost, padding: '8px 20px' }} onClick={onDone}>Saltar</button>
+    </div>
+  );
+}
+
+// ─── EXERCISE CARD ─────────────────────────────────────────────────────────────
+function ExerciseCard({ exercise, index }) {
+  return (
+    <div style={{ ...s.card2, display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+      <div style={{ width: 36, height: 36, borderRadius: 10, background: ACCENT + '15', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <span className="bebas" style={{ color: ACCENT, fontSize: 16 }}>{index + 1}</span>
+      </div>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>{exercise.name}</div>
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: exercise.notes ? 8 : 0 }}>
+          <span style={{ fontSize: 13, color: ACCENT, fontWeight: 600 }}>{exercise.sets} × {exercise.reps}</span>
+          <span style={{ fontSize: 13, color: '#666' }}>{exercise.rest}s descanso</span>
+        </div>
+        {exercise.notes && <div style={{ fontSize: 13, color: '#888', fontStyle: 'italic' }}>{exercise.notes}</div>}
+        {exercise.video && (
+          <a href={exercise.video} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#FF4444', marginTop: 6, textDecoration: 'none' }}>
+            <Video size={12} /> Ver video
+          </a>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── WORKOUT SESSION (GAMIFICADO) ───────────────────────────────────────────
+function WorkoutSession({ exercises, clientId, onComplete, onCancel }) {
+  const [exIdx, setExIdx] = useState(0);
+  const [setsDone, setSetsDone] = useState({});
+  const [weights, setWeights] = useState({});
+  const [resting, setResting] = useState(false);
+  const [restTime, setRestTime] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const [customSets, setCustomSets] = useState({});
+  const [nextExScreen, setNextExScreen] = useState(false);
+  const startTime = useRef(Date.now());
+
+  const ex = exercises[exIdx];
+  if (!ex) return null;
+
+  const totalSets = customSets[ex.id] || parseInt(ex.sets) || 3;
+  const doneSets = setsDone[ex.id] || 0;
+  const totalExercises = exercises.length;
+  const exProgress = exIdx + 1;
+  const progressPct = Math.round((exProgress / totalExercises) * 100);
+  const allExDone = exercises.every(e => (setsDone[e.id] || 0) >= (customSets[e.id] || parseInt(e.sets) || 3));
+
+  const getMotivationalMessage = () => {
+    if (progressPct === 100) return '¡CASI LISTO! 🔥 Une última cosa...';
+    if (progressPct >= 75) return '¡Vas imparable! 💪 Falta poco';
+    if (progressPct >= 50) return '¡Mitad recorrida! 🚀 Dale, dale';
+    if (progressPct >= 25) return '¡Vamos bien! 💥 Seguí así';
+    return '¡Dale! 💪 Vamos a quemar';
+  };
+
+  const completeSet = () => {
+    const nd = { ...setsDone, [ex.id]: doneSets + 1 };
+    setSetsDone(nd);
+    if (doneSets + 1 < totalSets) {
+      setRestTime(ex.rest || 60);
+      setResting(true);
+    } else if (exIdx < exercises.length - 1) {
+      setNextExScreen(true);
+      setTimeout(() => {
+        setExIdx(i => i + 1);
+        setNextExScreen(false);
+        setResting(false);
+      }, 2000);
+    }
+  };
+
+  const finishWorkout = async () => {
+    setSaving(true);
+    const duration = Math.round((Date.now() - startTime.current) / 60000);
+    await supabase.from('fit_logs').upsert({
+      client_id: clientId,
+      date: getToday(),
+      completed: true,
+      duration,
+      exercises: weights,
+    }, { onConflict: 'client_id,date' });
+    setSaving(false);
+    onComplete();
+  };
+
+  if (nextExScreen) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20, padding: '60px 20px', textAlign: 'center', animation: 'slide-up 0.3s ease' }}>
+        <Confetti />
+        <div style={{ fontSize: 80 }}>✅</div>
+        <div className="bebas" style={{ fontSize: 36, color: ACCENT }}>¡EJERCICIO COMPLETADO!</div>
+        <div style={{ fontSize: 18, color: '#888' }}>Muy bien, pasamos al siguiente...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {/* Barra de progreso visual */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+            <div style={s.label}>Progreso</div>
+            <div className="bebas" style={{ fontSize: 20, color: ACCENT }}>{progressPct}%</div>
+          </div>
+          <div style={{ width: '100%', height: 8, background: BORDER, borderRadius: 10, overflow: 'hidden' }}>
+            <div style={{ width: `${progressPct}%`, height: '100%', background: ACCENT, transition: 'width 0.6s ease', boxShadow: `0 0 15px ${ACCENT}` }} />
+          </div>
+        </div>
+        <button onClick={onCancel} style={{ background: 'none', color: '#666', padding: '8px' }}><X size={18} /></button>
+      </div>
+
+      {/* Mensaje motivacional */}
+      <div style={{ background: ACCENT + '15', border: `1px solid ${ACCENT}30`, borderRadius: 12, padding: '12px 16px', textAlign: 'center' }}>
+        <div className="bebas" style={{ fontSize: 16, color: ACCENT }}>{getMotivationalMessage()}</div>
+      </div>
+
+      {/* Card del ejercicio */}
+      <div style={{ ...s.card, boxShadow: `0 0 30px rgba(200,255,0,0.15)` }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+          <div>
+            <div style={{ ...s.label, marginBottom: 4 }}>Ejercicio {exProgress} de {totalExercises}</div>
+            <div className="bebas" style={{ fontSize: 26, color: ACCENT }}>{ex.name}</div>
+          </div>
+          <div style={{ background: ACCENT + '20', borderRadius: 8, padding: '6px 12px', fontSize: 12, fontWeight: 700, color: ACCENT }}>
+            {doneSets}/{totalSets} series
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
+          <div><span style={{ ...s.label }}>Reps</span><div style={{ fontSize: 20, fontWeight: 800, color: ACCENT }}>{ex.reps}</div></div>
+          <div><span style={{ ...s.label }}>Descanso</span><div style={{ fontSize: 20, fontWeight: 800, color: ACCENT }}>{ex.rest}s</div></div>
+          <div>
+            <span style={{ ...s.label }}>Series</span>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}>
+              <select value={totalSets} onChange={e => setCustomSets({ ...customSets, [ex.id]: parseInt(e.target.value) })} style={{ ...s.input, width: 60, padding: '6px 8px', fontSize: 14 }}>
+                {[1, 2, 3, 4, 5, 6].map(n => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {ex.notes && <div style={{ background: '#1A1A1A', borderRadius: 8, padding: '8px 12px', fontSize: 13, color: '#888', marginBottom: 12 }}>💡 {ex.notes}</div>}
+        {ex.video && (
+          <a href={ex.video} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#FF4444', marginBottom: 12, textDecoration: 'none' }}>
+            <Video size={14} /> Ver técnica
+          </a>
+        )}
+
+        <div style={{ marginBottom: 16 }}>
+          <label style={s.label}>Peso utilizado (kg)</label>
+          <input style={{ ...s.input, marginTop: 6, fontSize: 18, fontWeight: 700, textAlign: 'center' }} type="number" placeholder="0" value={weights[ex.id] || ''}
+            onChange={e => setWeights({ ...weights, [ex.id]: e.target.value })} />
+        </div>
+
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 20 }}>
+          {Array.from({ length: totalSets }, (_, i) => (
+            <div key={i} style={{ width: 40, height: 40, borderRadius: 10, border: `2px solid ${i < doneSets ? ACCENT : BORDER}`, background: i < doneSets ? ACCENT + '20' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', animation: i < doneSets ? 'check-pop 0.4s ease' : 'none', lineHeight: 1 }}>
+              {i < doneSets ? <Check size={18} color={ACCENT} /> : <span style={{ fontSize: 13, color: '#555', lineHeight: 1 }}>{i + 1}</span>}
+            </div>
+          ))}
+        </div>
+
+        <div style={{ background: '#1A2A1A', border: `1px solid ${ACCENT}40`, borderRadius: 10, padding: '10px 14px', fontSize: 12, color: '#88CC00' }}>
+          💡 Inhala en la bajada, exhala al empujar. Recorrido completo siempre.
+        </div>
+
+        {resting ? (
+          <RestTimer seconds={restTime} onDone={() => { setResting(false); }} />
+        ) : doneSets < totalSets ? (
+          <button style={{ ...s.btn, fontSize: 16, padding: '16px', boxShadow: `0 0 20px rgba(200,255,0,0.3)` }} onClick={completeSet}>
+            Serie {doneSets + 1} completada ✓
+          </button>
+        ) : exIdx < exercises.length - 1 ? (
+          <button style={{ ...s.btn, background: ACCENT, fontSize: 16, padding: '16px' }} onClick={() => setNextExScreen(true)}>
+            ✅ Ejercicio listo → Siguiente
+          </button>
+        ) : null}
+      </div>
+
+      {allExDone && (
+        <button style={{ ...s.btn, background: ACCENT, fontSize: 18, padding: '18px', boxShadow: `0 0 30px rgba(200,255,0,0.4)`, opacity: saving ? 0.7 : 1 }} onClick={finishWorkout} disabled={saving}>
+          {saving ? 'Guardando…' : '🎉 ¡TERMINAR ENTRENAMIENTO!'}
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ─── STUDENT HOME (today) ──────────────────────────────────────────────────────
+function StudentHome({ client, routine, todayLog, allLogs, onStartWorkout }) {
+  const today = DAYS[new Date().getDay()];
+  const todayExercises = routine?.days?.[today] || [];
+  const streak = calculateStreak(allLogs);
+  const points = allLogs.length * 50;
+  const achievements = unlockedAchievements(allLogs);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20, animation: 'slide-up 0.3s ease' }}>
+      <div className="bebas" style={{ fontSize: 30 }}>Hola, {client.name.split(' ')[0]} 👋</div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+        <div style={{ ...s.card, animation: streak >= 3 ? 'pulse-glow 3s ease infinite' : 'none' }}>
+          <div style={s.label}>Racha actual</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
+            <span className="bebas" style={{ fontSize: 44, color: streak >= 3 ? '#FF6B35' : '#fff', lineHeight: 1 }}>{streak}</span>
+            <span style={{ fontSize: 24, animation: streak >= 3 ? 'fire 0.8s ease infinite' : 'none', display: 'inline-block' }}>🔥</span>
+          </div>
+          <div style={{ fontSize: 12, color: '#555', marginTop: 2 }}>días consecutivos</div>
+        </div>
+        <div style={s.card}>
+          <div style={s.label}>Puntos</div>
+          <div className="bebas" style={{ fontSize: 44, color: ACCENT, lineHeight: 1, marginTop: 6 }}>{points}</div>
+          <div style={{ fontSize: 12, color: '#555', marginTop: 2 }}>XP acumulados</div>
+        </div>
+      </div>
+
+      {achievements.length > 0 && (
+        <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
+          {achievements.map(id => {
+            const def = ACHIEVEMENT_DEFS.find(a => a.id === id);
+            if (!def) return null;
+            return (
+              <div key={id} title={def.label} style={{ flexShrink: 0, background: ACCENT + '15', border: `1px solid ${ACCENT}30`, borderRadius: 10, padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 18 }}>{def.icon}</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: ACCENT, whiteSpace: 'nowrap' }}>{def.label}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {!routine ? (
+        <div style={s.card}>
+          <EmptyState icon={Dumbbell} title="Sin rutina asignada" message="Tu coach todavía no te asignó una rutina. Avisale por WhatsApp para empezar 💪" />
+        </div>
+      ) : (
+        <div style={s.card}>
+          <div style={{ ...s.label, marginBottom: 12 }}>Entrenamiento de hoy — {today}</div>
+          {todayLog?.completed ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: ACCENT + '15', borderRadius: 10, padding: 14 }}>
+              <div style={{ width: 36, height: 36, borderRadius: '50%', background: ACCENT, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Check size={18} color={BG} />
+              </div>
+              <div>
+                <div style={{ fontWeight: 700, color: ACCENT }}>¡Ya entrenaste hoy!</div>
+                <div style={{ fontSize: 13, color: '#888' }}>{todayLog.duration} minutos</div>
+              </div>
+            </div>
+          ) : todayExercises.length > 0 ? (
+            <>
+              <div style={{ fontSize: 13, color: '#888', marginBottom: 12 }}>{todayExercises.length} ejercicios · {routine.name}</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
+                {todayExercises.slice(0, 3).map((ex, i) => (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, padding: '8px 0', borderBottom: `1px solid ${BORDER}` }}>
+                    <span>{ex.name}</span>
+                    <span style={{ color: ACCENT, fontWeight: 600 }}>{ex.sets}×{ex.reps}</span>
+                  </div>
+                ))}
+                {todayExercises.length > 3 && <div style={{ fontSize: 13, color: '#666' }}>+{todayExercises.length - 3} más…</div>}
+              </div>
+              <button style={{ ...s.btn, boxShadow: `0 0 25px rgba(200,255,0,0.3)` }} onClick={onStartWorkout}>
+                ⚡ Empezar entrenamiento de hoy
+              </button>
+            </>
+          ) : (
+            <div style={{ fontSize: 14, color: '#666', padding: '12px 0' }}>Hoy es día de descanso 😴</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── STUDENT FULL WEEK ─────────────────────────────────────────────────────────
+function StudentRoutine({ routine, todayLog }) {
+  const today = DAYS[new Date().getDay()];
+
+  if (!routine) return <EmptyState icon={Dumbbell} title="Sin rutina asignada" message="Tu coach aún no te asignó una rutina. Avisale para empezar 💪" />;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20, animation: 'slide-up 0.3s ease' }}>
+      <div style={s.card}>
+        <div className="bebas" style={{ fontSize: 24 }}>{routine.name}</div>
+        <div style={{ fontSize: 14, color: '#888', marginTop: 4 }}>{routine.description}</div>
+      </div>
+      {Object.entries(routine.days).map(([day, exercises]) => {
+        const isToday = day === today;
+        const isDone = !!todayLog?.completed && isToday;
+        return (
+          <div key={day} style={{ ...s.card, border: `1px solid ${isToday ? ACCENT + '50' : BORDER}`, boxShadow: isToday ? `0 0 20px rgba(200,255,0,0.1)` : 'none' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+              <div className="bebas" style={{ fontSize: 20, color: isToday ? ACCENT : '#fff' }}>{day}</div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {isToday && <Pill label="HOY" color={ACCENT} />}
+                {isDone && <Pill label="✓ COMPLETADO" color="#4ECDC4" />}
+              </div>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {exercises.map((ex, i) => <ExerciseCard key={ex.id} exercise={ex} index={i} />)}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── HELPERS ───────────────────────────────────────────────────────────────────
+function exerciseNameMap(routine) {
+  const map = {};
+  if (!routine?.days) return map;
+  Object.values(routine.days).forEach(exs => exs.forEach(ex => { map[ex.id] = ex.name; }));
+  return map;
+}
+
+function formatDate(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+// ─── STUDENT HISTORY ────────────────────────────────────────────────────────────
+function StudentHistory({ clientId, routine }) {
+  const [logs, setLogs] = useState(null);
+  const [photos, setPhotos] = useState(null);
+  const nameMap = exerciseNameMap(routine);
+
+  useEffect(() => {
+    Promise.all([
+      supabase.from('fit_logs').select('*').eq('client_id', clientId).eq('completed', true).order('date', { ascending: false }).limit(30).then(r => r.data || []),
+      supabase.from('fit_workout_photos').select('*').eq('client_id', clientId).order('photo_date', { ascending: false }).limit(50).then(r => r.data || []),
+    ]).then(([logsData, photosData]) => {
+      setLogs(logsData);
+      setPhotos(photosData);
+    });
+  }, [clientId]);
+
+  if (logs === null) return <div style={{ color: '#666', padding: '24px 0' }}>Cargando…</div>;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20, animation: 'slide-up 0.3s ease' }}>
+      <div className="bebas" style={{ fontSize: 26 }}>Tu historial</div>
+
+      {photos && photos.length > 0 && (
+        <div style={s.card}>
+          <div style={{ ...s.label, marginBottom: 12 }}>Tu progreso visual</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: 8 }}>
+            {photos.map(p => (
+              <img key={p.id} src={p.photo_url} style={{ width: '100%', aspectRatio: '1', borderRadius: 8, objectFit: 'cover' }} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {logs.length === 0 ? (
+        <EmptyState icon={History} title="Sin entrenamientos todavía" message="Cuando termines tu primer entrenamiento, vas a ver tu historial acá" />
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {logs.map(log => (
+            <div key={log.id} style={s.card2}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <div style={{ fontWeight: 700, fontSize: 15, textTransform: 'capitalize' }}>{formatDate(log.date)}</div>
+                <Pill label={`${log.duration ?? '–'} min`} />
+              </div>
+              {log.exercises && Object.keys(log.exercises).length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {Object.entries(log.exercises).map(([exId, weight]) => (
+                    <div key={exId} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#999' }}>
+                      <span>{nameMap[exId] || exId}</span>
+                      <span style={{ color: ACCENT, fontWeight: 600 }}>{weight} kg</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── POST-WORKOUT PHOTOS ───────────────────────────────────────────────────────
+function PostWorkoutPhotos({ clientId, onClose, onSave }) {
+  const [photos, setPhotos] = useState([]);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef(null);
+
+  const handlePhotoCapture = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (photos.length + files.length > 3) {
+      alert('Máximo 3 fotos');
+      return;
+    }
+    setUploading(true);
+
+    for (const file of files) {
+      const filename = `${clientId}/${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
+      const { data, error } = await supabase.storage.from('workout_photos').upload(filename, file);
+
+      if (!error && data) {
+        const { data: { publicUrl } } = supabase.storage.from('workout_photos').getPublicUrl(filename);
+        await supabase.from('fit_workout_photos').insert({
+          client_id: clientId,
+          photo_url: publicUrl,
+          photo_date: getToday(),
+          uploaded_by: null,
+        });
+        setPhotos([...photos, publicUrl]);
+      }
+    }
+    setUploading(false);
+  };
+
+  return (
+    <div style={{ minHeight: '100vh', background: BG, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, textAlign: 'center', gap: 20 }}>
+      <Confetti />
+      <div style={{ fontSize: 80 }}>🔥</div>
+      <div className="bebas" style={{ fontSize: 32, color: ACCENT }}>¡ENTRENAMIENTO COMPLETADO!</div>
+      <div style={{ fontSize: 16, color: '#888', maxWidth: 300 }}>Sácate una foto de tu pump y guarda tu progreso 💪</div>
+
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+        {photos.map((p, i) => (
+          <img key={i} src={p} style={{ width: 80, height: 80, borderRadius: 8, objectFit: 'cover' }} />
+        ))}
+      </div>
+
+      {photos.length < 3 && (
+        <button onClick={() => fileInputRef.current?.click()} style={{ ...s.btn, maxWidth: 300 }} disabled={uploading}>
+          {uploading ? 'Subiendo…' : photos.length === 0 ? '📸 Sacar foto' : '➕ Otra foto'}
+        </button>
+      )}
+      <input ref={fileInputRef} type="file" multiple accept="image/*" onChange={handlePhotoCapture} style={{ display: 'none' }} />
+
+      <button onClick={onSave} style={{ ...s.btnGhost, maxWidth: 300 }}>
+        {photos.length > 0 ? '✅ Listo, continuar' : 'Saltar fotos'}
+      </button>
+    </div>
+  );
+}
+
+// ─── QUICK COACH LOG (registrar entrenamientos presenciales) ─────────────────
+function QuickCoachLog({ client, routine, onBack, onSave }) {
+  const [today] = useState(getToday());
+  const [setsDone, setSetsDone] = useState({});
+  const [weights, setWeights] = useState({});
+  const [saving, setSaving] = useState(false);
+  const today_day = DAYS[new Date().getDay()];
+  const todayExercises = routine?.days?.[today_day] || [];
+
+  const saveLog = async () => {
+    setSaving(true);
+    await supabase.from('fit_logs').upsert({
+      client_id: client.id,
+      date: today,
+      completed: true,
+      duration: 0,
+      exercises: weights,
+    }, { onConflict: 'client_id,date' });
+    setSaving(false);
+    onSave();
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <button onClick={onBack} style={{ background: 'none', color: '#888', display: 'flex', alignItems: 'center', gap: 4, fontSize: 13 }}>
+        <ChevronLeft size={16} /> Volver
+      </button>
+      <div className="bebas" style={{ fontSize: 24 }}>⚡ Quick Log — {client.name}</div>
+      <div style={{ ...s.label }}>Registra el entrenamiento de {today_day}</div>
+
+      {todayExercises.length === 0 ? (
+        <div style={{ color: '#666' }}>No hay ejercicios para {today_day}</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {todayExercises.map(ex => (
+            <div key={ex.id} style={s.card}>
+              <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 8 }}>{ex.name}</div>
+              <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
+                <div style={{ flex: 1 }}>
+                  <label style={s.label}>Peso (kg)</label>
+                  <input style={{ ...s.input, marginTop: 4, fontSize: 14 }} type="number" placeholder="0" value={weights[ex.id] || ''}
+                    onChange={e => setWeights({ ...weights, [ex.id]: e.target.value })} />
+                </div>
+                <div style={{ width: 100 }}>
+                  <label style={s.label}>Series</label>
+                  <select value={setsDone[ex.id] || ex.sets} onChange={e => setSetsDone({ ...setsDone, [ex.id]: e.target.value })} style={{ ...s.input, marginTop: 4, fontSize: 14 }}>
+                    {[1, 2, 3, 4, 5, 6].map(n => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </div>
+              </div>
+            </div>
+          ))}
+          <button style={{ ...s.btn, marginTop: 8 }} onClick={saveLog} disabled={saving}>
+            {saving ? 'Guardando…' : '✅ Guardar entrenamiento'}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── UPLOAD PHOTOS PANEL ────────────────────────────────────────────────────
+function UploadPhotosPanel({ client, onBack, onSave }) {
+  const [selectedDate, setSelectedDate] = useState(getToday());
+  const [uploading, setUploading] = useState(false);
+
+  const handlePhotoUpload = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    setUploading(true);
+
+    for (const file of files.slice(0, 3)) {
+      const filename = `${client.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
+      const { data, error } = await supabase.storage.from('workout_photos').upload(filename, file);
+
+      if (!error && data) {
+        const { data: { publicUrl } } = supabase.storage.from('workout_photos').getPublicUrl(filename);
+        await supabase.from('fit_workout_photos').insert({
+          client_id: client.id,
+          photo_url: publicUrl,
+          photo_date: selectedDate,
+          uploaded_by: null,
+        });
+      }
+    }
+    setUploading(false);
+    onSave();
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <button onClick={onBack} style={{ background: 'none', color: '#888', display: 'flex', alignItems: 'center', gap: 4, fontSize: 13 }}>
+        <ChevronLeft size={16} /> Volver
+      </button>
+      <div className="bebas" style={{ fontSize: 24 }}>📸 Subir fotos — {client.name}</div>
+
+      <div style={s.card}>
+        <label style={{ ...s.label, display: 'block', marginBottom: 8 }}>Fecha de la foto</label>
+        <input style={{ ...s.input, marginBottom: 16 }} type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} />
+
+        <label style={{ ...s.label, display: 'block', marginBottom: 8 }}>Selecciona fotos (máximo 3)</label>
+        <input type="file" multiple accept="image/*" onChange={handlePhotoUpload} disabled={uploading} style={{ display: 'block', marginBottom: 12 }} />
+        <div style={{ fontSize: 12, color: '#666' }}>Soporta JPG, PNG. Máximo 3 fotos por subida.</div>
+      </div>
+    </div>
+  );
+}
+
+// ─── ADMIN PANEL (coach) ───────────────────────────────────────────────────────
+const GROUPS = {
+  '1': { name: 'Grupo 1 (6-7 AM)', clients: ['01b2d8eb-479c-413b-a32b-d0071c8531c5', '390f8357-0b79-42ce-b086-431c1ddc0798', '31c6e03c-81e2-49d5-b315-83e72628c6b3'] }, // Vero, Ale, Albert
+  '2': { name: 'Grupo 2 (5-6 AM)', clients: ['be4a6986-ae74-47a0-931c-11e91dcdfb32', 'ef30aeef-f16e-46d7-9feb-a32e51636a79'] }, // Rodri, Diego
+};
+
+function AdminPanel({ onLogout, onSwitchToTraining }) {
+  const [view, setView] = useState('groups'); // 'groups' | 'group-clients' | 'client' | 'quick-log' | 'upload-photos'
+  const [selectedGroup, setSelectedGroup] = useState(null);
+  const [selectedClient, setSelectedClient] = useState(null);
+  const [clients, setClients] = useState(null);
+  const [groupClients, setGroupClients] = useState(null);
+  const [logs, setLogs] = useState(null);
+  const [photos, setPhotos] = useState(null);
+  const [routine, setRoutine] = useState(null);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
+
+  useEffect(() => {
+    supabase.from('fit_clients').select('*').order('created_at', { ascending: false })
+      .then(({ data }) => setClients(data || []));
+  }, []);
+
+  const openGroup = async (groupId) => {
+    setSelectedGroup(groupId);
+    setView('group-clients');
+    const clientIds = GROUPS[groupId].clients;
+    const { data } = await supabase.from('fit_clients').select('*').in('id', clientIds);
+    setGroupClients(data || []);
+  };
+
+  const openClient = async (client) => {
+    setSelectedClient(client);
+    setView('client');
+    setLogs(null);
+    setPhotos(null);
+    setRoutine(null);
+    const [{ data: logRows }, { data: photoRows }, routineRow] = await Promise.all([
+      supabase.from('fit_logs').select('*').eq('client_id', client.id).eq('completed', true).order('date', { ascending: false }).limit(30),
+      supabase.from('fit_workout_photos').select('*').eq('client_id', client.id).order('photo_date', { ascending: false }).limit(20),
+      getClientRoutine(client.id),
+    ]);
+    setLogs(logRows || []);
+    setPhotos(photoRows || []);
+    setRoutine(routineRow);
+  };
+
+  const sessionsThisWeek = (clientLogs) => {
+    const weekAgo = new Date(); weekAgo.setDate(weekAgo.getDate() - 7);
+    return (clientLogs || []).filter(l => new Date(l.date) >= weekAgo).length;
+  };
+
+  const avgWeight = (clientLogs, exerciseId) => {
+    const weights = clientLogs.filter(l => l.exercises?.[exerciseId]).map(l => parseFloat(l.exercises[exerciseId]));
+    return weights.length ? (weights.reduce((a, b) => a + b, 0) / weights.length).toFixed(1) : '–';
+  };
+
+  return (
+    <div style={{ minHeight: '100vh', background: BG }}>
+      <div style={{ maxWidth: 700, margin: '0 auto', padding: isMobile ? '20px 16px 60px' : '32px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+          <div>
+            <div style={s.label}>Panel del coach</div>
+            <div className="bebas" style={{ fontSize: 30 }}>Yvanoff Fitness</div>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {onSwitchToTraining && (
+              <button onClick={onSwitchToTraining} style={{ ...s.btnGhost, padding: '8px 14px', display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+                <Dumbbell size={15} /> Mi entrenamiento
+              </button>
+            )}
+            <button onClick={onLogout} style={{ background: '#1A1A1A', border: `1px solid ${BORDER}`, borderRadius: 10, padding: '8px 14px', display: 'flex', alignItems: 'center', gap: 6, color: '#888', fontSize: 13 }}>
+              <LogOut size={15} /> Salir
+            </button>
+          </div>
+        </div>
+
+        {/* VISTA: Grupos */}
+        {view === 'groups' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ ...s.label, display: 'flex', alignItems: 'center', gap: 6 }}><Users size={14} /> Mis grupos</div>
+            {Object.entries(GROUPS).map(([id, group]) => (
+              <button key={id} onClick={() => openGroup(id)} style={{ ...s.card, display: 'flex', justifyContent: 'space-between', alignItems: 'center', textAlign: 'left', color: '#fff' }}>
+                <span style={{ fontWeight: 700, fontSize: 15 }}>{group.name}</span>
+                <ChevronLeft size={16} style={{ transform: 'rotate(180deg)', color: '#666' }} />
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* VISTA: Clientes del grupo */}
+        {view === 'group-clients' && selectedGroup && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <button onClick={() => setView('groups')} style={{ background: 'none', color: '#888', display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, marginBottom: 8 }}>
+              <ChevronLeft size={16} /> Volver
+            </button>
+            <div style={{ ...s.label, display: 'flex', alignItems: 'center', gap: 6 }}><Users size={14} /> {GROUPS[selectedGroup].name}</div>
+            {groupClients?.map(c => (
+              <button key={c.id} onClick={() => openClient(c)} style={{ ...s.card, display: 'flex', justifyContent: 'space-between', alignItems: 'center', textAlign: 'left', color: '#fff' }}>
+                <span style={{ fontWeight: 700, fontSize: 15 }}>{c.name}</span>
+                <ChevronLeft size={16} style={{ transform: 'rotate(180deg)', color: '#666' }} />
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* VISTA: Cliente detail + Quick Log */}
+        {view === 'client' && selectedClient && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <button onClick={() => { setView('group-clients'); setSelectedClient(null); }} style={{ background: 'none', color: '#888', display: 'flex', alignItems: 'center', gap: 4, fontSize: 13 }}>
+              <ChevronLeft size={16} /> Volver
+            </button>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div className="bebas" style={{ fontSize: 26 }}>{selectedClient.name}</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => setView('quick-log')} style={{ ...s.btnGhost, padding: '8px 12px', fontSize: 12 }}>⚡ Quick Log</button>
+                <button onClick={() => setView('upload-photos')} style={{ ...s.btnGhost, padding: '8px 12px', fontSize: 12 }}>📸 Fotos</button>
+              </div>
+            </div>
+
+            {logs && (
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div style={s.card}>
+                    <div style={s.label}>Entrenos/semana</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
+                      <span className="bebas" style={{ fontSize: 40, color: ACCENT }}>{sessionsThisWeek(logs)}</span>
+                      <Flame size={20} color="#FF6B35" />
+                    </div>
+                  </div>
+                  <div style={s.card}>
+                    <div style={s.label}>Rutina asignada</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, marginTop: 10 }}>{routine?.name || 'Sin asignar'}</div>
+                  </div>
+                </div>
+
+                {photos && photos.length > 0 && (
+                  <div style={s.card}>
+                    <div style={{ ...s.label, marginBottom: 10 }}>Últimas fotos ({photos.length})</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                      {photos.slice(0, 6).map(p => (
+                        <img key={p.id} src={p.photo_url} style={{ width: '100%', aspectRatio: '1', borderRadius: 8, objectFit: 'cover' }} />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div style={s.card}>
+                  <div style={{ ...s.label, marginBottom: 12 }}>Historial de entrenamientos</div>
+                  {logs.length === 0 ? (
+                    <div style={{ fontSize: 14, color: '#666' }}>Todavía no entrenó.</div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {logs.map(log => {
+                        const nameMap = exerciseNameMap(routine);
+                        return (
+                          <div key={log.id} style={s.card2}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                              <span style={{ fontWeight: 700, fontSize: 14, textTransform: 'capitalize' }}>{formatDate(log.date)}</span>
+                              <Pill label={`${log.duration ?? '–'} min`} />
+                            </div>
+                            {log.exercises && Object.entries(log.exercises).map(([exId, weight]) => (
+                              <div key={exId} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#999' }}>
+                                <span>{nameMap[exId] || exId}</span>
+                                <span style={{ color: ACCENT, fontWeight: 600 }}>{weight} kg</span>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* VISTA: Quick Log */}
+        {view === 'quick-log' && selectedClient && routine && (
+          <QuickCoachLog client={selectedClient} routine={routine} onBack={() => { setView('client'); }} onSave={() => { openClient(selectedClient); }} />
+        )}
+
+        {/* VISTA: Upload Fotos */}
+        {view === 'upload-photos' && selectedClient && (
+          <UploadPhotosPanel client={selectedClient} onBack={() => { setView('client'); }} onSave={() => { openClient(selectedClient); }} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── TAB BAR ───────────────────────────────────────────────────────────────────
+function TabBar({ tabs, active, onChange, isMobile }) {
+  if (isMobile) {
+    return (
+      <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: '#111', borderTop: `1px solid ${BORDER}`, display: 'flex', zIndex: 100, paddingBottom: 'env(safe-area-inset-bottom)' }}>
+        {tabs.map(t => (
+          <button key={t.id} onClick={() => onChange(t.id)} style={{ flex: 1, background: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '12px 4px 10px', color: active === t.id ? ACCENT : '#555', transition: 'color 0.2s' }}>
+            {React.createElement(t.icon, { size: 22 })}
+            <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.04em' }}>{t.label}</span>
+          </button>
+        ))}
+      </div>
+    );
+  }
+  return (
+    <div style={{ width: 200, background: '#111', borderRight: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column', padding: '24px 12px', gap: 4, flexShrink: 0 }}>
+      <div className="bebas" style={{ fontSize: 22, color: ACCENT, padding: '0 12px', marginBottom: 24, letterSpacing: '0.1em' }}>FITTRACK</div>
+      {tabs.map(t => (
+        <button key={t.id} onClick={() => onChange(t.id)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderRadius: 10, background: active === t.id ? ACCENT + '15' : 'transparent', color: active === t.id ? ACCENT : '#666', fontWeight: 600, fontSize: 14, transition: 'all 0.2s', textAlign: 'left' }}>
+          {React.createElement(t.icon, { size: 18 })}
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ─── LOGIN SCREEN ──────────────────────────────────────────────────────────────
+function LoginScreen() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleLogin = async () => {
+    setLoading(true);
+    setError('');
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) setError('Email o contraseña incorrectos');
+    setLoading(false);
+  };
+
+  return (
+    <div style={{ minHeight: '100vh', background: BG, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+      <div style={{ width: '100%', maxWidth: 380 }}>
+        <div style={{ textAlign: 'center', marginBottom: 48 }}>
+          <div className="bebas" style={{ fontSize: 52, color: ACCENT, letterSpacing: '0.1em', lineHeight: 1 }}>FITTRACK</div>
+          <div style={{ fontSize: 15, color: '#555', marginTop: 8 }}>Yvanoff Fitness — tu entrenamiento, digitalizado.</div>
+        </div>
+        <div style={{ ...s.card, boxShadow: `0 0 40px rgba(200,255,0,0.08)` }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div>
+              <label style={{ ...s.label, display: 'block', marginBottom: 6 }}>Email</label>
+              <input style={s.input} type="email" placeholder="tu@email.com" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleLogin()} autoCapitalize="none" />
+            </div>
+            <div>
+              <label style={{ ...s.label, display: 'block', marginBottom: 6 }}>Contraseña</label>
+              <input style={s.input} type="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleLogin()} />
+            </div>
+            {error && <div style={{ background: '#FF444415', border: '1px solid #FF444430', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#FF6666' }}>{error}</div>}
+            <button style={{ ...s.btn, opacity: loading ? 0.7 : 1, marginTop: 4 }} onClick={handleLogin} disabled={loading}>
+              {loading ? 'Iniciando sesión…' : 'Entrar'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── STUDENT APP (post-login) ──────────────────────────────────────────────────
+function StudentApp({ session, onLogout, headerExtra }) {
+  const [client, setClient] = useState(null);
+  const [routine, setRoutine] = useState(null);
+  const [todayLog, setTodayLog] = useState(null);
+  const [allLogs, setAllLogs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState('home');
+  const [inWorkout, setInWorkout] = useState(false);
+  const [photoCapture, setPhotoCapture] = useState(false);
+  const [photos, setPhotos] = useState([]);
+  const [celebration, setCelebration] = useState(null);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
+
+  const reloadLogs = async (clientId) => {
+    const [{ data: logRow }, { data: logRows }] = await Promise.all([
+      supabase.from('fit_logs').select('*').eq('client_id', clientId).eq('date', getToday()).maybeSingle(),
+      supabase.from('fit_logs').select('date,duration').eq('client_id', clientId).eq('completed', true).order('date', { ascending: false }).limit(365),
+    ]);
+    setTodayLog(logRow || null);
+    setAllLogs(logRows || []);
+    return logRows || [];
+  };
+
+  useEffect(() => {
+    const load = async () => {
+      const clientId = session.user.id;
+      const [{ data: clientRow }, routineRow] = await Promise.all([
+        supabase.from('fit_clients').select('*').eq('id', clientId).single(),
+        getClientRoutine(clientId),
+      ]);
+      setClient(clientRow || { name: session.user.email.split('@')[0] });
+      setRoutine(routineRow);
+      await reloadLogs(clientId);
+      setLoading(false);
+    };
+    load();
+  }, [session]);
+
+  const today = DAYS[new Date().getDay()];
+  const todayExercises = routine?.days?.[today] || [];
+
+  const tabs = [
+    { id: 'home', label: 'Hoy', icon: Dumbbell },
+    { id: 'routine', label: 'Mi semana', icon: Dumbbell },
+    { id: 'history', label: 'Historial', icon: History },
+  ];
+
+  if (loading) {
+    return (
+      <div style={{ minHeight: '100vh', background: BG, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div className="bebas" style={{ fontSize: 24, color: ACCENT }}>Cargando…</div>
+      </div>
+    );
+  }
+
+  if (photoCapture) {
+    return (
+      <PostWorkoutPhotos
+        clientId={session.user.id}
+        onClose={() => setPhotoCapture(false)}
+        onSave={() => {
+          setPhotoCapture(false);
+          setInWorkout(false);
+        }}
+      />
+    );
+  }
+
+  if (inWorkout) {
+    return (
+      <div style={{ minHeight: '100vh', background: BG, padding: '20px 16px 40px' }}>
+        <div style={{ maxWidth: 480, margin: '0 auto' }}>
+          <div className="bebas" style={{ fontSize: 28, marginBottom: 20, color: ACCENT }}>⚡ {today} — En curso</div>
+          {todayExercises.length === 0 ? (
+            <EmptyState icon={Dumbbell} title="Día de descanso" message="No hay ejercicios asignados para hoy" />
+          ) : (
+            <WorkoutSession
+              exercises={todayExercises}
+              clientId={session.user.id}
+              onCancel={() => setInWorkout(false)}
+              onComplete={async () => {
+                const before = unlockedAchievements(allLogs);
+                const freshLogs = await reloadLogs(session.user.id);
+                const after = unlockedAchievements(freshLogs);
+                const newId = after.find(id => !before.includes(id));
+                setCelebration({ achievement: ACHIEVEMENT_DEFS.find(a => a.id === newId) || null });
+                setPhotoCapture(true);
+              }}
+            />
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', height: '100vh', background: BG, flexDirection: isMobile ? 'column' : 'row' }}>
+      {celebration && <CelebrationModal achievement={celebration.achievement} onClose={() => { setCelebration(null); setTab('home'); }} />}
+      {!isMobile && <TabBar tabs={tabs} active={tab} onChange={setTab} isMobile={false} />}
+      <div style={{ flex: 1, overflowY: 'auto', paddingBottom: isMobile ? 80 : 0 }}>
+        <div style={{ maxWidth: 700, margin: '0 auto', padding: isMobile ? '20px 16px' : '32px 32px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 8 }}>
+            {headerExtra}
+            <button onClick={onLogout} style={{ background: '#1A1A1A', border: `1px solid ${BORDER}`, borderRadius: 10, padding: '8px 14px', display: 'flex', alignItems: 'center', gap: 6, color: '#888', fontSize: 13, marginLeft: 'auto' }}>
+              <LogOut size={15} /> Salir
+            </button>
+          </div>
+          {tab === 'home' && (
+            <StudentHome client={client} routine={routine} todayLog={todayLog} allLogs={allLogs} onStartWorkout={() => setInWorkout(true)} />
+          )}
+          {tab === 'routine' && <StudentRoutine routine={routine} todayLog={todayLog} />}
+          {tab === 'history' && <StudentHistory clientId={session.user.id} routine={routine} />}
+        </div>
+      </div>
+      {isMobile && <TabBar tabs={tabs} active={tab} onChange={setTab} isMobile={true} />}
+    </div>
+  );
+}
+
+// ─── MAIN APP ──────────────────────────────────────────────────────────────────
+export default function App() {
+  const [session, setSession] = useState(null);
+  const [booted, setBooted] = useState(false);
+  const [adminView, setAdminView] = useState('panel');
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      setBooted(true);
+    });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      setSession(newSession);
+    });
+    return () => listener.subscription.unsubscribe();
+  }, []);
+
+  const handleLogout = () => supabase.auth.signOut();
+
+  if (!booted) return (
+    <div style={{ minHeight: '100vh', background: BG, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div className="bebas" style={{ fontSize: 24, color: ACCENT }}>Cargando…</div>
+    </div>
+  );
+
+  const isAdmin = session?.user?.email === ADMIN_EMAIL;
+
+  return (
+    <>
+      <FontStyle />
+      {!session ? (
+        <LoginScreen />
+      ) : isAdmin && adminView === 'panel' ? (
+        <AdminPanel onLogout={handleLogout} onSwitchToTraining={() => setAdminView('training')} />
+      ) : (
+        <StudentApp
+          session={session}
+          onLogout={handleLogout}
+          headerExtra={isAdmin && (
+            <button onClick={() => setAdminView('panel')} style={{ ...s.btnGhost, padding: '8px 14px', display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+              <ChevronLeft size={15} /> Panel coach
+            </button>
+          )}
+        />
+      )}
+    </>
+  );
+}
