@@ -846,16 +846,33 @@ function RoutineBuilder({ clients, onBack }) {
           </div>
         </div>
 
-        {/* Day tabs */}
-        <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4 }}>
-          {weekDays.map(d => {
-            const count = (editing.days[d] || []).filter(e => e.name.trim()).length;
-            return (
-              <button key={d} onClick={() => setActiveDay(d)} style={{ flexShrink: 0, background: activeDay === d ? ACCENT + '20' : '#1A1A1A', color: activeDay === d ? ACCENT : '#888', border: `1px solid ${activeDay === d ? ACCENT : BORDER}`, borderRadius: 10, padding: '8px 14px', fontSize: 13, fontWeight: 600 }}>
-                {d.slice(0, 3)}{count > 0 ? ` · ${count}` : ''}
-              </button>
-            );
-          })}
+        {/* Day tabs + duplicate button */}
+        <div>
+          <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 8 }}>
+            {weekDays.map(d => {
+              const count = (editing.days[d] || []).filter(e => e.name.trim()).length;
+              return (
+                <button key={d} onClick={() => setActiveDay(d)} style={{ flexShrink: 0, background: activeDay === d ? ACCENT + '20' : '#1A1A1A', color: activeDay === d ? ACCENT : '#888', border: `1px solid ${activeDay === d ? ACCENT : BORDER}`, borderRadius: 10, padding: '8px 14px', fontSize: 13, fontWeight: 600 }}>
+                  {d.slice(0, 3)}{count > 0 ? ` · ${count}` : ''}
+                </button>
+              );
+            })}
+          </div>
+          {exercisesFor(activeDay).filter(e => e.name.trim()).length > 0 && (
+            <button
+              onClick={() => {
+                const exercises = exercisesFor(activeDay);
+                const newDays = { ...editing.days };
+                weekDays.forEach(d => {
+                  newDays[d] = exercises.map(ex => ({ ...ex, id: `ex_${Date.now()}_${Math.random().toString(36).slice(2, 7)}` }));
+                });
+                setEditing({ ...editing, days: newDays });
+              }}
+              style={{ ...s.btnGhost, width: '100%', fontSize: 12 }}
+            >
+              🔄 Duplicar {activeDay} a todos los días
+            </button>
+          )}
         </div>
 
         {/* Exercises for active day */}
