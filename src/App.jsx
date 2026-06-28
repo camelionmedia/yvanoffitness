@@ -1099,7 +1099,7 @@ function RoutineBuilder({ clients, onBack }) {
                         }
                       }
 
-                      setEditing(updatedDays);
+                      setEditing({ ...editing, days: updatedDays });
                     }}
                     style={{ ...s.input, marginTop: 4, fontSize: 14 }}
                   >
