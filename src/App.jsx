@@ -1005,6 +1005,13 @@ function RoutineBuilder({ clients, onBack }) {
               </div>
               <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
                 <div style={{ flex: 1 }}>
+                  <label style={s.label}>Grupo muscular</label>
+                  <select value={ex.muscle_group || ''} onChange={e => updateExercise(activeDay, idx, 'muscle_group', e.target.value)} style={{ ...s.input, marginTop: 4, fontSize: 14 }}>
+                    <option value="">-- Selecciona --</option>
+                    {MUSCLE_GROUPS.map(mg => <option key={mg} value={mg}>{mg}</option>)}
+                  </select>
+                </div>
+                <div style={{ flex: 1 }}>
                   <label style={s.label}>Tipo de técnica</label>
                   <select value={ex.type || 'normal'} onChange={e => updateExercise(activeDay, idx, 'type', e.target.value)} style={{ ...s.input, marginTop: 4, fontSize: 14 }}>
                     <option value="normal">Normal</option>
