@@ -775,6 +775,13 @@ function RoutineBuilder({ clients, onBack }) {
     setExercisesFor(day, list);
   };
   const removeExercise = (day, idx) => setExercisesFor(day, exercisesFor(day).filter((_, i) => i !== idx));
+  const moveExercise = (day, idx, direction) => {
+    const list = [...exercisesFor(day)];
+    const newIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (newIdx < 0 || newIdx >= list.length) return;
+    [list[idx], list[newIdx]] = [list[newIdx], list[idx]];
+    setExercisesFor(day, list);
+  };
 
   const toggleAssign = (clientId) => {
     const has = editing.assignedIds.includes(clientId);
@@ -882,8 +889,20 @@ function RoutineBuilder({ clients, onBack }) {
           )}
           {dayExercises.map((ex, idx) => (
             <div key={ex.id} style={s.card}>
-              <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'center' }}>
                 <input style={{ ...s.input, fontWeight: 700 }} placeholder="Nombre del ejercicio" value={ex.name} onChange={e => updateExercise(activeDay, idx, 'name', e.target.value)} />
+                <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                  <button
+                    onClick={() => moveExercise(activeDay, idx, 'up')}
+                    disabled={idx === 0}
+                    style={{ background: idx === 0 ? '#1A1A1A' : '#1A3A1A', border: '1px solid #2A4A2A', borderRadius: 8, padding: '8px 10px', color: idx === 0 ? '#555' : ACCENT, opacity: idx === 0 ? 0.4 : 1, cursor: idx === 0 ? 'default' : 'pointer' }}
+                  >↑</button>
+                  <button
+                    onClick={() => moveExercise(activeDay, idx, 'down')}
+                    disabled={idx === dayExercises.length - 1}
+                    style={{ background: idx === dayExercises.length - 1 ? '#1A1A1A' : '#1A3A1A', border: '1px solid #2A4A2A', borderRadius: 8, padding: '8px 10px', color: idx === dayExercises.length - 1 ? '#555' : ACCENT, opacity: idx === dayExercises.length - 1 ? 0.4 : 1, cursor: idx === dayExercises.length - 1 ? 'default' : 'pointer' }}
+                  >↓</button>
+                </div>
                 <button onClick={() => removeExercise(activeDay, idx)} style={{ background: '#2A1A1A', border: '1px solid #4A2A2A', borderRadius: 10, padding: '0 12px', color: '#FF6666', flexShrink: 0 }}><X size={16} /></button>
               </div>
               <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
