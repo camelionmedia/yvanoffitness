@@ -336,10 +336,10 @@ function WorkoutSession({ exercises, clientId, onComplete, onCancel }) {
             onChange={e => setWeights({ ...weights, [ex.id]: e.target.value })} />
         </div>
 
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 20 }}>
+        <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 28 }}>
           {Array.from({ length: totalSets }, (_, i) => (
-            <div key={i} style={{ width: 40, height: 40, borderRadius: 10, border: `2px solid ${i < doneSets ? ACCENT : BORDER}`, background: i < doneSets ? ACCENT + '20' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', animation: i < doneSets ? 'check-pop 0.4s ease' : 'none', lineHeight: 1 }}>
-              {i < doneSets ? <Check size={18} color={ACCENT} /> : <span style={{ fontSize: 13, color: '#555', lineHeight: 1 }}>{i + 1}</span>}
+            <div key={i} style={{ width: 44, height: 44, borderRadius: 10, border: `2px solid ${i < doneSets ? ACCENT : BORDER}`, background: i < doneSets ? ACCENT + '20' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', animation: i < doneSets ? 'check-pop 0.4s ease' : 'none', lineHeight: 1 }}>
+              {i < doneSets ? <Check size={20} color={ACCENT} /> : <span style={{ fontSize: 14, fontWeight: 600, color: '#555', lineHeight: 1 }}>{i + 1}</span>}
             </div>
           ))}
         </div>
@@ -596,10 +596,10 @@ function PostWorkoutPhotos({ clientId, onClose, onSave }) {
   };
 
   return (
-    <div style={{ minHeight: '100vh', background: BG, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, textAlign: 'center', gap: 20 }}>
+    <div style={{ minHeight: '100vh', background: BG, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, textAlign: 'center', gap: 32 }}>
       <Confetti />
-      <div style={{ fontSize: 80 }}>🔥</div>
-      <div className="bebas" style={{ fontSize: 32, color: ACCENT }}>¡ENTRENAMIENTO COMPLETADO!</div>
+      <div style={{ fontSize: 80, marginBottom: 8 }}>🔥</div>
+      <div className="bebas" style={{ fontSize: 32, color: ACCENT, marginBottom: 16 }}>¡ENTRENAMIENTO COMPLETADO!</div>
       <div style={{ fontSize: 16, color: '#888', maxWidth: 300 }}>Sácate una foto de tu pump y guarda tu progreso 💪</div>
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
