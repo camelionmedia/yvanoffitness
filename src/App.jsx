@@ -43,6 +43,10 @@ const ACHIEVEMENT_DEFS = [
   { id: 'speed_runner', icon: '⚡', label: 'Velocista', desc: 'Entreno en menos de 40 min' },
 ];
 
+const MUSCLE_GROUPS = [
+  'Pecho', 'Espalda', 'Piernas', 'Bíceps', 'Tríceps', 'Hombros', 'Abdominales', 'Glúteos'
+];
+
 function getToday() { return new Date().toISOString().split('T')[0]; }
 
 // logs: array of { date: 'YYYY-MM-DD', completed, duration } sorted desc by date, completed-only
@@ -807,6 +811,7 @@ function newExercise() {
     id: `ex_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
     name: '',
     type: 'normal', // 'normal', 'dropset', 'superset'
+    muscle_group: '', // 'Pecho', 'Espalda', 'Piernas', etc.
     video: '',
     notes: '',
     linkedExerciseId: null, // if type === 'superset', link to next exercise
@@ -980,12 +985,33 @@ function RoutineBuilder({ clients, onBack }) {
           )}
         </div>
 
-        {/* Exercises for active day */}
+        {/* Exercises for active day - grouped by muscle */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {dayExercises.length === 0 && (
             <div style={{ color: '#555', fontSize: 14, textAlign: 'center', padding: '20px 0' }}>Sin ejercicios para {activeDay}. Agregá el primero 👇</div>
           )}
-          {dayExercises.map((ex, idx) => (
+          {(() => {
+            // Group exercises by muscle_group
+            const grouped = {};
+            dayExercises.forEach((ex, idx) => {
+              const mg = ex.muscle_group || '(Sin grupo)';
+              if (!grouped[mg]) grouped[mg] = [];
+              grouped[mg].push({ ...ex, idx });
+            });
+
+            // Get unique muscle groups in order (prioritize muscle_groups list)
+            const orderedGroups = [
+              ...MUSCLE_GROUPS.filter(mg => grouped[mg]),
+              ...(grouped['(Sin grupo)'] ? ['(Sin grupo)'] : [])
+            ];
+
+            return orderedGroups.map(mg => (
+              <div key={mg} style={{ borderTop: `2px solid ${ACCENT}30`, paddingTop: 12 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: ACCENT, marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  {mg} ({grouped[mg].length})
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {grouped[mg].map(({ ...ex, idx }) => (
             <div key={ex.id} style={s.card}>
               <div style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'center' }}>
                 <input style={{ ...s.input, fontWeight: 700 }} placeholder="Nombre del ejercicio" value={ex.name} onChange={e => updateExercise(activeDay, idx, 'name', e.target.value)} />
@@ -1004,6 +1030,15 @@ function RoutineBuilder({ clients, onBack }) {
                 <button onClick={() => removeExercise(activeDay, idx)} style={{ background: '#2A1A1A', border: '1px solid #4A2A2A', borderRadius: 10, padding: '0 12px', color: '#FF6666', flexShrink: 0 }}><X size={16} /></button>
               </div>
               <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                <div style={{ flex: 1 }}>
+                  <label style={s.label}>Grupo muscular</label>
+                  <select value={ex.muscle_group || ''} onChange={e => updateExercise(activeDay, idx, 'muscle_group', e.target.value)} style={{ ...s.input, marginTop: 4, fontSize: 14 }}>
+                    <option value="">-- Selecciona --</option>
+                    {MUSCLE_GROUPS.map(mg => (
+                      <option key={mg} value={mg}>{mg}</option>
+                    ))}
+                  </select>
+                </div>
                 <div style={{ flex: 1 }}>
                   <label style={s.label}>Tipo de técnica</label>
                   <select value={ex.type || 'normal'} onChange={e => updateExercise(activeDay, idx, 'type', e.target.value)} style={{ ...s.input, marginTop: 4, fontSize: 14 }}>
@@ -1172,8 +1207,12 @@ function RoutineBuilder({ clients, onBack }) {
               <input style={{ ...s.input, marginTop: 4, marginBottom: 8, fontSize: 14 }} placeholder="https://youtube.com/..." value={ex.video} onChange={e => updateExercise(activeDay, idx, 'video', e.target.value)} />
               <label style={s.label}>Notas (opcional)</label>
               <input style={{ ...s.input, marginTop: 4, fontSize: 14 }} placeholder="Ej: bajada controlada 3 seg" value={ex.notes} onChange={e => updateExercise(activeDay, idx, 'notes', e.target.value)} />
-            </div>
-          ))}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ));
+          })()}
           <button onClick={() => addExercise(activeDay)} style={{ ...s.btnGhost, width: '100%' }}>+ Agregar ejercicio a {activeDay}</button>
         </div>
 
