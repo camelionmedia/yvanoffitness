@@ -210,7 +210,8 @@ function ExerciseCard({ exercise, index }) {
 function WorkoutSession({ exercises, clientId, onComplete, onCancel }) {
   const [exIdx, setExIdx] = useState(0);
   const [phasesDone, setPhasesDone] = useState({}); // { ex.id: phasesCompleted }
-  const [weights, setWeights] = useState({});
+  const [phaseWeights, setPhaseWeights] = useState({}); // { ex.id: [weight per phase] }
+  const [weights, setWeights] = useState({}); // for logging (last weight used)
   const [resting, setResting] = useState(false);
   const [restTime, setRestTime] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -341,12 +342,32 @@ function WorkoutSession({ exercises, clientId, onComplete, onCancel }) {
         </div>
 
         {currentPhase && (
-          <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
-            {currentPhase.peso && <div><span style={{ ...s.label }}>Peso</span><div style={{ fontSize: 20, fontWeight: 800, color: ACCENT }}>{currentPhase.peso}kg</div></div>}
-            <div><span style={{ ...s.label }}>Reps</span><div style={{ fontSize: 20, fontWeight: 800, color: ACCENT }}>{currentPhase.reps}</div></div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
+            <div style={{ display: 'flex', gap: 12 }}>
+              <div style={{ flex: 1 }}>
+                <span style={{ ...s.label }}>Peso (kg)</span>
+                <input
+                  type="number"
+                  placeholder="20"
+                  value={(phaseWeights[ex.id]?.[donePhases]) || ''}
+                  onChange={e => {
+                    const weights = phaseWeights[ex.id] ? [...phaseWeights[ex.id]] : [];
+                    weights[donePhases] = e.target.value;
+                    setPhaseWeights({ ...phaseWeights, [ex.id]: weights });
+                    setWeights({ ...weights, [ex.id]: e.target.value });
+                  }}
+                  style={{ ...s.input, marginTop: 4, fontSize: 16, padding: '12px', fontWeight: 700 }}
+                  autoFocus
+                />
+              </div>
+              <div style={{ flex: 1 }}>
+                <span style={{ ...s.label }}>Reps</span>
+                <div style={{ fontSize: 16, fontWeight: 800, color: ACCENT, marginTop: 8, padding: '8px' }}>{currentPhase.reps}</div>
+              </div>
+            </div>
             <div>
               <span style={{ ...s.label }}>Descanso</span>
-              <div style={{ fontSize: 20, fontWeight: 800, color: parseInt(currentPhase.descanso) === 0 ? '#FF6666' : ACCENT }}>
+              <div style={{ fontSize: 16, fontWeight: 800, color: parseInt(currentPhase.descanso) === 0 ? '#FF6666' : ACCENT, marginTop: 4 }}>
                 {parseInt(currentPhase.descanso) === 0 ? '⚡ SIN DESCANSO' : `${currentPhase.descanso}s`}
               </div>
             </div>
@@ -995,14 +1016,31 @@ function RoutineBuilder({ clients, onBack }) {
                 </div>
               )}
 
-              {/* Fases table */}
-              <label style={s.label}>Fases</label>
+              {/* Number of phases selector */}
+              <div style={{ marginBottom: 12 }}>
+                <label style={s.label}>¿Cuántas fases?</label>
+                <select
+                  value={ex.phases?.filter(p => p.reps).length || 3}
+                  onChange={e => {
+                    const newCount = parseInt(e.target.value);
+                    const phases = [...ex.phases];
+                    while (phases.length < newCount) phases.push({ reps: '', descanso: '' });
+                    phases.splice(newCount);
+                    updateExercise(activeDay, idx, 'phases', phases);
+                  }}
+                  style={{ ...s.input, marginTop: 4, fontSize: 14 }}
+                >
+                  {[1, 2, 3, 4, 5, 6].map(n => <option key={n} value={n}>{n} {n === 1 ? 'fase' : 'fases'}</option>)}
+                </select>
+              </div>
+
+              {/* Fases table (reps and descanso only) */}
+              <label style={s.label}>Detalles de cada fase</label>
               <div style={{ marginBottom: 12, overflowX: 'auto', borderRadius: 8, border: `1px solid ${BORDER}` }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                   <thead>
                     <tr style={{ background: '#1A1A1A' }}>
                       <th style={{ padding: '8px', textAlign: 'left', color: '#888', fontWeight: 600, borderRight: `1px solid ${BORDER}` }}>Fase</th>
-                      <th style={{ padding: '8px', textAlign: 'left', color: '#888', fontWeight: 600, borderRight: `1px solid ${BORDER}` }}>Peso (kg)</th>
                       <th style={{ padding: '8px', textAlign: 'left', color: '#888', fontWeight: 600, borderRight: `1px solid ${BORDER}` }}>Reps</th>
                       <th style={{ padding: '8px', textAlign: 'left', color: '#888', fontWeight: 600 }}>Descanso (s)</th>
                     </tr>
@@ -1011,7 +1049,6 @@ function RoutineBuilder({ clients, onBack }) {
                     {(ex.phases || []).map((phase, pIdx) => (
                       <tr key={pIdx} style={{ borderTop: `1px solid ${BORDER}` }}>
                         <td style={{ padding: '8px', textAlign: 'center', color: '#aaa' }}>{pIdx + 1}</td>
-                        <td style={{ padding: '6px' }}><input type="number" placeholder="20" value={phase.peso} onChange={e => { const phases = [...ex.phases]; phases[pIdx] = { ...phases[pIdx], peso: e.target.value }; updateExercise(activeDay, idx, 'phases', phases); }} style={{ ...s.input, fontSize: 12, padding: '6px', width: '100%' }} /></td>
                         <td style={{ padding: '6px' }}><input type="text" placeholder="8-10" value={phase.reps} onChange={e => { const phases = [...ex.phases]; phases[pIdx] = { ...phases[pIdx], reps: e.target.value }; updateExercise(activeDay, idx, 'phases', phases); }} style={{ ...s.input, fontSize: 12, padding: '6px', width: '100%' }} /></td>
                         <td style={{ padding: '6px' }}><input type="number" placeholder="90" value={phase.descanso} onChange={e => { const phases = [...ex.phases]; phases[pIdx] = { ...phases[pIdx], descanso: e.target.value }; updateExercise(activeDay, idx, 'phases', phases); }} style={{ ...s.input, fontSize: 12, padding: '6px', width: '100%' }} /></td>
                       </tr>
