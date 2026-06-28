@@ -1071,37 +1071,39 @@ function RoutineBuilder({ clients, onBack }) {
                 ) : null;
               })()}
 
-              {/* Number of phases selector */}
-              <div style={{ marginBottom: 12 }}>
-                <label style={s.label}>
-                  ¿Cuántas series?
-                  {ex.type === 'superset' && ' (ambos ejercicios)'}
-                </label>
-                <select
-                  value={ex.phases?.length || 3}
-                  onChange={e => {
-                    const newCount = parseInt(e.target.value);
-                    const phases = [...(ex.phases || [])];
-                    while (phases.length < newCount) phases.push({ reps: '', descanso: '' });
-                    phases.splice(newCount);
-                    updateExercise(activeDay, idx, 'phases', phases);
+              {/* Number of series selector - HIDE if this exercise is linked by another superset */}
+              {!dayExercises.some(e => e.type === 'superset' && e.linkedExerciseId === ex.id) && (
+                <div style={{ marginBottom: 12 }}>
+                  <label style={s.label}>
+                    ¿Cuántas series?
+                    {ex.type === 'superset' && ' (ambos ejercicios)'}
+                  </label>
+                  <select
+                    value={ex.phases?.length || 3}
+                    onChange={e => {
+                      const newCount = parseInt(e.target.value);
+                      const phases = [...(ex.phases || [])];
+                      while (phases.length < newCount) phases.push({ reps: '', descanso: '' });
+                      phases.splice(newCount);
+                      updateExercise(activeDay, idx, 'phases', phases);
 
-                    // If this is a superset, also update linked exercise's phase count
-                    if (ex.type === 'superset' && ex.linkedExerciseId) {
-                      const linkedIdx = dayExercises.findIndex(e => e.id === ex.linkedExerciseId);
-                      if (linkedIdx !== -1) {
-                        const linkedPhases = [...(dayExercises[linkedIdx].phases || [])];
-                        while (linkedPhases.length < newCount) linkedPhases.push({ reps: '', descanso: '' });
-                        linkedPhases.splice(newCount);
-                        updateExercise(activeDay, linkedIdx, 'phases', linkedPhases);
+                      // If this is a superset, also update linked exercise's phase count
+                      if (ex.type === 'superset' && ex.linkedExerciseId) {
+                        const linkedIdx = dayExercises.findIndex(e => e.id === ex.linkedExerciseId);
+                        if (linkedIdx !== -1) {
+                          const linkedPhases = [...(dayExercises[linkedIdx].phases || [])];
+                          while (linkedPhases.length < newCount) linkedPhases.push({ reps: '', descanso: '' });
+                          linkedPhases.splice(newCount);
+                          updateExercise(activeDay, linkedIdx, 'phases', linkedPhases);
+                        }
                       }
-                    }
-                  }}
-                  style={{ ...s.input, marginTop: 4, fontSize: 14 }}
-                >
-                  {[1, 2, 3, 4, 5, 6].map(n => <option key={n} value={n}>{n} {n === 1 ? 'serie' : 'series'}</option>)}
-                </select>
-              </div>
+                    }}
+                    style={{ ...s.input, marginTop: 4, fontSize: 14 }}
+                  >
+                    {[1, 2, 3, 4, 5, 6].map(n => <option key={n} value={n}>{n} {n === 1 ? 'serie' : 'series'}</option>)}
+                  </select>
+                </div>
+              )}
 
               {/* series table (reps and descanso only) */}
               <label style={s.label}>
