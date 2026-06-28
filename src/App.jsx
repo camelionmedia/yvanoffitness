@@ -732,7 +732,19 @@ function UploadPhotosPanel({ client, onBack, onSave }) {
 
 // ─── ROUTINE BUILDER (coach) ─────────────────────────────────────────────────
 function newExercise() {
-  return { id: `ex_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`, name: '', sets: 4, reps: '8-12', rest: 90, notes: '', video: '' };
+  return {
+    id: `ex_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    name: '',
+    type: 'normal', // 'normal', 'dropset', 'pyramid', 'superset', 'rest-pause'
+    video: '',
+    notes: '',
+    phases: [
+      { peso: '', reps: '', descanso: '' },
+      { peso: '', reps: '', descanso: '' },
+      { peso: '', reps: '', descanso: '' },
+      { peso: '', reps: '', descanso: '' },
+    ]
+  };
 }
 
 function RoutineBuilder({ clients, onBack }) {
@@ -905,21 +917,42 @@ function RoutineBuilder({ clients, onBack }) {
                 </div>
                 <button onClick={() => removeExercise(activeDay, idx)} style={{ background: '#2A1A1A', border: '1px solid #4A2A2A', borderRadius: 10, padding: '0 12px', color: '#FF6666', flexShrink: 0 }}><X size={16} /></button>
               </div>
-              <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
                 <div style={{ flex: 1 }}>
-                  <label style={s.label}>Series</label>
-                  <select value={ex.sets} onChange={e => updateExercise(activeDay, idx, 'sets', parseInt(e.target.value))} style={{ ...s.input, marginTop: 4, fontSize: 14 }}>
-                    {[1, 2, 3, 4, 5, 6].map(n => <option key={n} value={n}>{n}</option>)}
+                  <label style={s.label}>Tipo de técnica</label>
+                  <select value={ex.type || 'normal'} onChange={e => updateExercise(activeDay, idx, 'type', e.target.value)} style={{ ...s.input, marginTop: 4, fontSize: 14 }}>
+                    <option value="normal">Normal</option>
+                    <option value="dropset">💧 Dropset</option>
+                    <option value="pyramid">🔺 Piramidal</option>
+                    <option value="superset">🔗 Superset</option>
+                    <option value="rest-pause">⏸️ Rest-Pause</option>
                   </select>
                 </div>
-                <div style={{ flex: 1 }}>
-                  <label style={s.label}>Reps</label>
-                  <input style={{ ...s.input, marginTop: 4, fontSize: 14 }} placeholder="8-12" value={ex.reps} onChange={e => updateExercise(activeDay, idx, 'reps', e.target.value)} />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <label style={s.label}>Descanso (s)</label>
-                  <input style={{ ...s.input, marginTop: 4, fontSize: 14 }} type="number" placeholder="90" value={ex.rest} onChange={e => updateExercise(activeDay, idx, 'rest', parseInt(e.target.value) || 0)} />
-                </div>
+              </div>
+
+              {/* Fases table */}
+              <label style={s.label}>Fases</label>
+              <div style={{ marginBottom: 12, overflowX: 'auto', borderRadius: 8, border: `1px solid ${BORDER}` }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                  <thead>
+                    <tr style={{ background: '#1A1A1A' }}>
+                      <th style={{ padding: '8px', textAlign: 'left', color: '#888', fontWeight: 600, borderRight: `1px solid ${BORDER}` }}>Fase</th>
+                      <th style={{ padding: '8px', textAlign: 'left', color: '#888', fontWeight: 600, borderRight: `1px solid ${BORDER}` }}>Peso (kg)</th>
+                      <th style={{ padding: '8px', textAlign: 'left', color: '#888', fontWeight: 600, borderRight: `1px solid ${BORDER}` }}>Reps</th>
+                      <th style={{ padding: '8px', textAlign: 'left', color: '#888', fontWeight: 600 }}>Descanso (s)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(ex.phases || []).map((phase, pIdx) => (
+                      <tr key={pIdx} style={{ borderTop: `1px solid ${BORDER}` }}>
+                        <td style={{ padding: '8px', textAlign: 'center', color: '#aaa' }}>{pIdx + 1}</td>
+                        <td style={{ padding: '6px' }}><input type="number" placeholder="20" value={phase.peso} onChange={e => { const phases = [...ex.phases]; phases[pIdx] = { ...phases[pIdx], peso: e.target.value }; updateExercise(activeDay, idx, 'phases', phases); }} style={{ ...s.input, fontSize: 12, padding: '6px', width: '100%' }} /></td>
+                        <td style={{ padding: '6px' }}><input type="text" placeholder="8-10" value={phase.reps} onChange={e => { const phases = [...ex.phases]; phases[pIdx] = { ...phases[pIdx], reps: e.target.value }; updateExercise(activeDay, idx, 'phases', phases); }} style={{ ...s.input, fontSize: 12, padding: '6px', width: '100%' }} /></td>
+                        <td style={{ padding: '6px' }}><input type="number" placeholder="90" value={phase.descanso} onChange={e => { const phases = [...ex.phases]; phases[pIdx] = { ...phases[pIdx], descanso: e.target.value }; updateExercise(activeDay, idx, 'phases', phases); }} style={{ ...s.input, fontSize: 12, padding: '6px', width: '100%' }} /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
               <label style={s.label}>Video técnica (URL opcional)</label>
               <input style={{ ...s.input, marginTop: 4, marginBottom: 8, fontSize: 14 }} placeholder="https://youtube.com/..." value={ex.video} onChange={e => updateExercise(activeDay, idx, 'video', e.target.value)} />
