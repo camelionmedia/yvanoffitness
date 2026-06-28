@@ -1082,18 +1082,15 @@ function RoutineBuilder({ clients, onBack }) {
                     value={ex.phases?.length || 3}
                     onChange={e => {
                       const newCount = parseInt(e.target.value);
-                      const phases = [...(ex.phases || [])];
-                      while (phases.length < newCount) phases.push({ reps: '', descanso: '' });
-                      phases.splice(newCount);
+                      // Create exactly newCount phases
+                      const phases = Array.from({ length: newCount }, () => ({ reps: '', descanso: '' }));
                       updateExercise(activeDay, idx, 'phases', phases);
 
                       // If this is a superset, also update linked exercise's phase count
                       if (ex.type === 'superset' && ex.linkedExerciseId) {
                         const linkedIdx = dayExercises.findIndex(e => e.id === ex.linkedExerciseId);
                         if (linkedIdx !== -1) {
-                          const linkedPhases = [...(dayExercises[linkedIdx].phases || [])];
-                          while (linkedPhases.length < newCount) linkedPhases.push({ reps: '', descanso: '' });
-                          linkedPhases.splice(newCount);
+                          const linkedPhases = Array.from({ length: newCount }, () => ({ reps: '', descanso: '' }));
                           updateExercise(activeDay, linkedIdx, 'phases', linkedPhases);
                         }
                       }
