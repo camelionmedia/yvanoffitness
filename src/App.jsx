@@ -395,19 +395,28 @@ function WorkoutSession({ exercises, clientId, onComplete, onCancel }) {
           ))}
         </div>
 
-        <div style={{ background: '#1A2A1A', border: `1px solid ${ACCENT}40`, borderRadius: 10, padding: '10px 14px', fontSize: 12, color: '#88CC00' }}>
-          💡 Inhala en la bajada, exhala al empujar. Recorrido completo siempre.
-        </div>
-
-        <div style={{ background: '#1A2A1A', border: `1px solid ${ACCENT}40`, borderRadius: 10, padding: '10px 14px', fontSize: 12, color: '#88CC00', marginBottom: 16 }}>
-          💡 Inhala en la bajada, exhala al empujar. Recorrido completo siempre.
-        </div>
+        {/* Instruction based on exercise type */}
+        {ex.type === 'dropset' && (
+          <div style={{ background: '#2A2A1A', border: '1px solid #FF6666', borderRadius: 10, padding: '12px', fontSize: 12, color: '#FF8888', marginBottom: 16, fontWeight: 700 }}>
+            ⚡ DROPSET: Completa esta fase y baja el peso para la siguiente SIN DESCANSO
+          </div>
+        )}
+        {ex.type === 'superset' && ex.linkedExerciseId && (
+          <div style={{ background: '#1A2A1A', border: `1px solid ${ACCENT}40`, borderRadius: 10, padding: '12px', fontSize: 12, color: '#88CC00', marginBottom: 16, fontWeight: 700 }}>
+            🔗 SUPERSET: Completa esta fase y pasa INMEDIATAMENTE a <strong>{exercises.find(e => e.id === ex.linkedExerciseId)?.name}</strong> SIN DESCANSO
+          </div>
+        )}
+        {ex.type === 'normal' && (
+          <div style={{ background: '#1A2A1A', border: `1px solid ${ACCENT}40`, borderRadius: 10, padding: '10px 14px', fontSize: 12, color: '#88CC00' }}>
+            💪 Controla el movimiento. Recorrido completo siempre.
+          </div>
+        )}
 
         {resting ? (
           <RestTimer seconds={restTime} onDone={() => { setResting(false); }} />
         ) : donePhases < totalPhases ? (
           <button style={{ ...s.btn, fontSize: 16, padding: '16px', boxShadow: `0 0 20px rgba(200,255,0,0.3)` }} onClick={completePhase}>
-            Fase {donePhases + 1} completada ✓
+            {ex.type === 'dropset' ? '✓ Fase ' + (donePhases + 1) + ' lista - Baja peso' : ex.type === 'superset' ? '✓ Pasa al siguiente' : '✓ Fase ' + (donePhases + 1) + ' completada'}
           </button>
         ) : exIdx < exercises.length - 1 ? (
           <button style={{ ...s.btn, background: ACCENT, fontSize: 16, padding: '16px' }} onClick={() => setNextExScreen(true)}>
@@ -802,12 +811,50 @@ function newExercise() {
     notes: '',
     linkedExerciseId: null, // if type === 'superset', link to next exercise
     phases: [
-      { peso: '', reps: '', descanso: '' },
-      { peso: '', reps: '', descanso: '' },
-      { peso: '', reps: '', descanso: '' },
-      { peso: '', reps: '', descanso: '' },
+      { reps: '', descanso: '' },
+      { reps: '', descanso: '' },
+      { reps: '', descanso: '' },
     ]
   };
+}
+
+// Validate exercise configuration (coach-side)
+function validateExercise(ex, allExercises) {
+  const errors = [];
+
+  if (!ex.name || !ex.name.trim()) errors.push('Nombre del ejercicio requerido');
+
+  if (!ex.phases || ex.phases.length === 0) errors.push('Mínimo 1 fase requerida');
+
+  // Validate all phases have reps
+  ex.phases.forEach((p, i) => {
+    if (!p.reps || !p.reps.toString().trim()) errors.push(`Fase ${i + 1}: Reps requeridos`);
+  });
+
+  // Dropset: validate no rest between phases
+  if (ex.type === 'dropset') {
+    ex.phases.forEach((p, i) => {
+      const descanso = parseInt(p.descanso) || 0;
+      if (descanso > 0) errors.push(`Fase ${i + 1}: Dropset debe tener 0s descanso`);
+    });
+  }
+
+  // Superset: validate linked exercise
+  if (ex.type === 'superset') {
+    if (!ex.linkedExerciseId) errors.push('Superset: Selecciona un ejercicio vinculado');
+
+    const linkedEx = allExercises.find(e => e.id === ex.linkedExerciseId);
+    if (ex.linkedExerciseId && !linkedEx) errors.push('Superset: Ejercicio vinculado no existe');
+
+    if (ex.linkedExerciseId === ex.id) errors.push('Superset: No puedes vincular consigo mismo');
+
+    // Superset: both must have same phase count
+    if (linkedEx && linkedEx.phases?.length !== ex.phases?.length) {
+      errors.push(`Superset: Ambos ejercicios deben tener ${ex.phases?.length} fases (${linkedEx.name} tiene ${linkedEx.phases?.length})`);
+    }
+  }
+
+  return errors;
 }
 
 function RoutineBuilder({ clients, onBack }) {
@@ -1023,17 +1070,56 @@ function RoutineBuilder({ clients, onBack }) {
                 </div>
               )}
 
+              {/* Validation errors (real-time) */}
+              {(() => {
+                const errors = validateExercise(ex, dayExercises);
+                return errors.length > 0 ? (
+                  <div style={{ background: '#2A1A1A', border: '1px solid #FF6666', borderRadius: 8, padding: '12px', marginBottom: 12 }}>
+                    <div style={{ color: '#FF6666', fontSize: 12, fontWeight: 700, marginBottom: 6 }}>⚠️ Errores:</div>
+                    {errors.map((err, i) => (
+                      <div key={i} style={{ fontSize: 12, color: '#FF8888', marginBottom: i < errors.length - 1 ? 4 : 0 }}>
+                        • {err}
+                      </div>
+                    ))}
+                  </div>
+                ) : null;
+              })()}
+
+              {/* For Superset: show linked exercise info + shared phase count */}
+              {ex.type === 'superset' && ex.linkedExerciseId && (() => {
+                const linked = dayExercises.find(e => e.id === ex.linkedExerciseId);
+                return linked ? (
+                  <div style={{ background: '#1A2A1A', border: `1px solid ${ACCENT}40`, borderRadius: 8, padding: '10px 12px', marginBottom: 12, fontSize: 12, color: '#88CC00' }}>
+                    🔗 Superset vinculado: <strong>{linked.name}</strong> ({linked.phases?.length || 0} fases)
+                  </div>
+                ) : null;
+              })()}
+
               {/* Number of phases selector */}
               <div style={{ marginBottom: 12 }}>
-                <label style={s.label}>¿Cuántas fases?</label>
+                <label style={s.label}>
+                  ¿Cuántas fases?
+                  {ex.type === 'superset' && ' (ambos ejercicios)'}
+                </label>
                 <select
-                  value={ex.phases?.filter(p => p.reps).length || 3}
+                  value={ex.phases?.length || 3}
                   onChange={e => {
                     const newCount = parseInt(e.target.value);
-                    const phases = [...ex.phases];
+                    const phases = [...(ex.phases || [])];
                     while (phases.length < newCount) phases.push({ reps: '', descanso: '' });
                     phases.splice(newCount);
                     updateExercise(activeDay, idx, 'phases', phases);
+
+                    // If this is a superset, also update linked exercise's phase count
+                    if (ex.type === 'superset' && ex.linkedExerciseId) {
+                      const linkedIdx = dayExercises.findIndex(e => e.id === ex.linkedExerciseId);
+                      if (linkedIdx !== -1) {
+                        const linkedPhases = [...(dayExercises[linkedIdx].phases || [])];
+                        while (linkedPhases.length < newCount) linkedPhases.push({ reps: '', descanso: '' });
+                        linkedPhases.splice(newCount);
+                        updateExercise(activeDay, linkedIdx, 'phases', linkedPhases);
+                      }
+                    }
                   }}
                   style={{ ...s.input, marginTop: 4, fontSize: 14 }}
                 >
@@ -1042,24 +1128,61 @@ function RoutineBuilder({ clients, onBack }) {
               </div>
 
               {/* Fases table (reps and descanso only) */}
-              <label style={s.label}>Detalles de cada fase</label>
+              <label style={s.label}>
+                Detalles de cada fase
+                {ex.type === 'dropset' && ' ⚡ (SIN descanso)'}
+              </label>
               <div style={{ marginBottom: 12, overflowX: 'auto', borderRadius: 8, border: `1px solid ${BORDER}` }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                   <thead>
                     <tr style={{ background: '#1A1A1A' }}>
                       <th style={{ padding: '8px', textAlign: 'left', color: '#888', fontWeight: 600, borderRight: `1px solid ${BORDER}` }}>Fase</th>
                       <th style={{ padding: '8px', textAlign: 'left', color: '#888', fontWeight: 600, borderRight: `1px solid ${BORDER}` }}>Reps</th>
-                      <th style={{ padding: '8px', textAlign: 'left', color: '#888', fontWeight: 600 }}>Descanso (s)</th>
+                      <th style={{ padding: '8px', textAlign: 'left', color: '#888', fontWeight: 600 }}>
+                        {ex.type === 'dropset' ? '⚡ Descanso' : 'Descanso (s)'}
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {(ex.phases || []).map((phase, pIdx) => (
-                      <tr key={pIdx} style={{ borderTop: `1px solid ${BORDER}` }}>
-                        <td style={{ padding: '8px', textAlign: 'center', color: '#aaa' }}>{pIdx + 1}</td>
-                        <td style={{ padding: '6px' }}><input type="text" placeholder="8-10" value={phase.reps} onChange={e => { const phases = [...ex.phases]; phases[pIdx] = { ...phases[pIdx], reps: e.target.value }; updateExercise(activeDay, idx, 'phases', phases); }} style={{ ...s.input, fontSize: 12, padding: '6px', width: '100%' }} /></td>
-                        <td style={{ padding: '6px' }}><input type="number" placeholder="90" value={phase.descanso} onChange={e => { const phases = [...ex.phases]; phases[pIdx] = { ...phases[pIdx], descanso: e.target.value }; updateExercise(activeDay, idx, 'phases', phases); }} style={{ ...s.input, fontSize: 12, padding: '6px', width: '100%' }} /></td>
-                      </tr>
-                    ))}
+                    {(ex.phases || []).map((phase, pIdx) => {
+                      // For dropset: force descanso = 0
+                      const descanso = ex.type === 'dropset' ? 0 : phase.descanso;
+                      return (
+                        <tr key={pIdx} style={{ borderTop: `1px solid ${BORDER}` }}>
+                          <td style={{ padding: '8px', textAlign: 'center', color: '#aaa' }}>{pIdx + 1}</td>
+                          <td style={{ padding: '6px' }}>
+                            <input
+                              type="text"
+                              placeholder="8-10"
+                              value={phase.reps}
+                              onChange={e => {
+                                const phases = [...ex.phases];
+                                phases[pIdx] = { ...phases[pIdx], reps: e.target.value };
+                                updateExercise(activeDay, idx, 'phases', phases);
+                              }}
+                              style={{ ...s.input, fontSize: 12, padding: '6px', width: '100%' }}
+                            />
+                          </td>
+                          <td style={{ padding: '6px' }}>
+                            {ex.type === 'dropset' ? (
+                              <div style={{ padding: '6px', textAlign: 'center', color: '#88CC00', fontWeight: 700 }}>⚡ 0s</div>
+                            ) : (
+                              <input
+                                type="number"
+                                placeholder="90"
+                                value={descanso}
+                                onChange={e => {
+                                  const phases = [...ex.phases];
+                                  phases[pIdx] = { ...phases[pIdx], descanso: e.target.value };
+                                  updateExercise(activeDay, idx, 'phases', phases);
+                                }}
+                                style={{ ...s.input, fontSize: 12, padding: '6px', width: '100%' }}
+                              />
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -1072,9 +1195,30 @@ function RoutineBuilder({ clients, onBack }) {
           <button onClick={() => addExercise(activeDay)} style={{ ...s.btnGhost, width: '100%' }}>+ Agregar ejercicio a {activeDay}</button>
         </div>
 
-        <button onClick={save} disabled={saving} style={{ ...s.btn, marginTop: 8 }}>
-          {saving ? 'Guardando…' : '✅ Guardar rutina'}
-        </button>
+        {(() => {
+          // Validate ALL exercises in ALL days
+          const allExercises = Object.values(editing.days).flat();
+          const allErrors = allExercises.flatMap(ex => validateExercise(ex, allExercises));
+          const hasErrors = allErrors.length > 0;
+
+          return (
+            <>
+              {hasErrors && (
+                <div style={{ background: '#2A1A1A', border: '1px solid #FF6666', borderRadius: 8, padding: '12px', marginBottom: 12 }}>
+                  <div style={{ color: '#FF6666', fontSize: 12, fontWeight: 700, marginBottom: 8 }}>❌ No se puede guardar: hay {allErrors.length} error{allErrors.length > 1 ? 'es' : ''}</div>
+                  <div style={{ fontSize: 11, color: '#FF8888', maxHeight: 120, overflowY: 'auto' }}>
+                    {allErrors.map((err, i) => (
+                      <div key={i} style={{ marginBottom: 4 }}>• {err}</div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <button onClick={save} disabled={saving || hasErrors} style={{ ...s.btn, marginTop: 8, opacity: hasErrors ? 0.4 : 1 }}>
+                {saving ? 'Guardando…' : hasErrors ? '❌ Corregí los errores' : '✅ Guardar rutina'}
+              </button>
+            </>
+          );
+        })()}
 
         {/* Modal: Duplicate to selected days */}
         {duplicateModal && (
