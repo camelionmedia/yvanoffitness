@@ -741,6 +741,7 @@ function RoutineBuilder({ clients, onBack }) {
   const [editing, setEditing] = useState(null); // null | { id?, name, description, days, assignedIds:[] }
   const [activeDay, setActiveDay] = useState('Lunes');
   const [saving, setSaving] = useState(false);
+  const [duplicateModal, setDuplicateModal] = useState(null); // null | { sourceDay, selected: {day: bool} }
   const weekDays = DAYS.slice(1).concat(DAYS[0]); // Lunes..Sábado, Domingo
 
   const load = async () => {
@@ -861,16 +862,15 @@ function RoutineBuilder({ clients, onBack }) {
           {exercisesFor(activeDay).filter(e => e.name.trim()).length > 0 && (
             <button
               onClick={() => {
-                const exercises = exercisesFor(activeDay);
-                const newDays = { ...editing.days };
+                const selected = {};
                 weekDays.forEach(d => {
-                  newDays[d] = exercises.map(ex => ({ ...ex, id: `ex_${Date.now()}_${Math.random().toString(36).slice(2, 7)}` }));
+                  selected[d] = d !== activeDay; // pre-select all except source day
                 });
-                setEditing({ ...editing, days: newDays });
+                setDuplicateModal({ sourceDay: activeDay, selected });
               }}
               style={{ ...s.btnGhost, width: '100%', fontSize: 12 }}
             >
-              🔄 Duplicar {activeDay} a todos los días
+              🔄 Duplicar {activeDay} a otros días
             </button>
           )}
         </div>
@@ -914,6 +914,55 @@ function RoutineBuilder({ clients, onBack }) {
         <button onClick={save} disabled={saving} style={{ ...s.btn, marginTop: 8 }}>
           {saving ? 'Guardando…' : '✅ Guardar rutina'}
         </button>
+
+        {/* Modal: Duplicate to selected days */}
+        {duplicateModal && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999, padding: 24 }}>
+            <div style={{ ...s.card, maxWidth: 400, width: '100%' }}>
+              <div className="bebas" style={{ fontSize: 20, marginBottom: 16 }}>Duplicar {duplicateModal.sourceDay}</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
+                {weekDays.map(d => (
+                  <label key={d} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={duplicateModal.selected[d] || false}
+                      onChange={e => setDuplicateModal({
+                        ...duplicateModal,
+                        selected: { ...duplicateModal.selected, [d]: e.target.checked }
+                      })}
+                      style={{ width: 18, height: 18, cursor: 'pointer' }}
+                    />
+                    <span style={{ fontSize: 14, color: '#fff' }}>{d}</span>
+                  </label>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button
+                  onClick={() => setDuplicateModal(null)}
+                  style={{ ...s.btnGhost, flex: 1 }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => {
+                    const exercises = exercisesFor(duplicateModal.sourceDay);
+                    const newDays = { ...editing.days };
+                    weekDays.forEach(d => {
+                      if (duplicateModal.selected[d]) {
+                        newDays[d] = exercises.map(ex => ({ ...ex, id: `ex_${Date.now()}_${Math.random().toString(36).slice(2, 7)}` }));
+                      }
+                    });
+                    setEditing({ ...editing, days: newDays });
+                    setDuplicateModal(null);
+                  }}
+                  style={{ ...s.btn, flex: 1 }}
+                >
+                  ✅ Duplicar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
