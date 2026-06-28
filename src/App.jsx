@@ -1216,47 +1216,373 @@ function TabBar({ tabs, active, onChange, isMobile }) {
   );
 }
 
-// ─── LOGIN SCREEN ──────────────────────────────────────────────────────────────
-function LoginScreen() {
+// ─── SIGNUP SCREEN ─────────────────────────────────────────────────────────
+function SignupScreen({ onSignupComplete }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [nombre, setNombre] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [view, setView] = useState('signup'); // 'signup' | 'login'
+
+  const handleSignup = async () => {
+    if (!email || !password || !nombre.trim()) {
+      setError('Completá todos los campos');
+      return;
+    }
+    setLoading(true);
+    setError('');
+    const { error: signupError } = await supabase.auth.signUp({ email, password });
+    if (signupError) {
+      setError(signupError.message || 'Error al crear la cuenta');
+      setLoading(false);
+      return;
+    }
+    onSignupComplete({ email, nombre });
+  };
 
   const handleLogin = async () => {
     setLoading(true);
     setError('');
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) setError('Email o contraseña incorrectos');
+    const { error: loginError } = await supabase.auth.signInWithPassword({ email, password });
+    if (loginError) {
+      setError('Email o contraseña incorrectos');
+    }
     setLoading(false);
   };
+
+  if (view === 'login') {
+    return (
+      <div style={{ minHeight: '100vh', background: BG, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+        <div style={{ width: '100%', maxWidth: 380 }}>
+          <div style={{ textAlign: 'center', marginBottom: 48 }}>
+            <div className="bebas" style={{ fontSize: 52, color: ACCENT, letterSpacing: '0.1em', lineHeight: 1 }}>FITTRACK</div>
+            <div style={{ fontSize: 15, color: '#555', marginTop: 8 }}>Yvanoff Fitness — tu entrenamiento, digitalizado.</div>
+          </div>
+          <div style={{ ...s.card, boxShadow: `0 0 40px rgba(200,255,0,0.08)` }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div>
+                <label style={{ ...s.label, display: 'block', marginBottom: 6 }}>Email</label>
+                <input style={s.input} type="email" placeholder="tu@email.com" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleLogin()} autoCapitalize="none" />
+              </div>
+              <div>
+                <label style={{ ...s.label, display: 'block', marginBottom: 6 }}>Contraseña</label>
+                <input style={s.input} type="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleLogin()} />
+              </div>
+              {error && <div style={{ background: '#FF444415', border: '1px solid #FF444430', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#FF6666' }}>{error}</div>}
+              <button style={{ ...s.btn, opacity: loading ? 0.7 : 1, marginTop: 4 }} onClick={handleLogin} disabled={loading}>
+                {loading ? 'Iniciando sesión…' : 'Entrar'}
+              </button>
+              <button style={{ background: 'none', color: ACCENT, border: 'none', fontSize: 14, fontWeight: 600, cursor: 'pointer' }} onClick={() => { setView('signup'); setError(''); setEmail(''); setPassword(''); setNombre(''); }}>
+                ¿No tenés cuenta? Registrate
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ minHeight: '100vh', background: BG, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
       <div style={{ width: '100%', maxWidth: 380 }}>
         <div style={{ textAlign: 'center', marginBottom: 48 }}>
           <div className="bebas" style={{ fontSize: 52, color: ACCENT, letterSpacing: '0.1em', lineHeight: 1 }}>FITTRACK</div>
-          <div style={{ fontSize: 15, color: '#555', marginTop: 8 }}>Yvanoff Fitness — tu entrenamiento, digitalizado.</div>
+          <div style={{ fontSize: 15, color: '#555', marginTop: 8 }}>Entrená conmigo. Sin excusas.</div>
         </div>
         <div style={{ ...s.card, boxShadow: `0 0 40px rgba(200,255,0,0.08)` }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div>
+              <label style={{ ...s.label, display: 'block', marginBottom: 6 }}>Nombre</label>
+              <input style={s.input} type="text" placeholder="Tu nombre" value={nombre} onChange={e => setNombre(e.target.value)} />
+            </div>
+            <div>
               <label style={{ ...s.label, display: 'block', marginBottom: 6 }}>Email</label>
-              <input style={s.input} type="email" placeholder="tu@email.com" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleLogin()} autoCapitalize="none" />
+              <input style={s.input} type="email" placeholder="tu@email.com" value={email} onChange={e => setEmail(e.target.value)} autoCapitalize="none" />
             </div>
             <div>
               <label style={{ ...s.label, display: 'block', marginBottom: 6 }}>Contraseña</label>
-              <input style={s.input} type="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleLogin()} />
+              <input style={s.input} type="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSignup()} />
             </div>
             {error && <div style={{ background: '#FF444415', border: '1px solid #FF444430', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#FF6666' }}>{error}</div>}
-            <button style={{ ...s.btn, opacity: loading ? 0.7 : 1, marginTop: 4 }} onClick={handleLogin} disabled={loading}>
-              {loading ? 'Iniciando sesión…' : 'Entrar'}
+            <button style={{ ...s.btn, opacity: loading ? 0.7 : 1, marginTop: 4 }} onClick={handleSignup} disabled={loading}>
+              {loading ? 'Creando cuenta…' : 'Registrarse'}
+            </button>
+            <button style={{ background: 'none', color: ACCENT, border: 'none', fontSize: 14, fontWeight: 600, cursor: 'pointer' }} onClick={() => { setView('login'); setError(''); setEmail(''); setPassword(''); setNombre(''); }}>
+              ¿Ya tenés cuenta? Entrar
             </button>
           </div>
         </div>
       </div>
     </div>
   );
+}
+
+// ─── ONBOARDING SCREEN ────────────────────────────────────────────────────────
+function OnboardingScreen({ email, nombre, onComplete }) {
+  const [step, setStep] = useState(0);
+  const [data, setData] = useState({
+    experiencia: '',
+    lesiones: '',
+    edad: '',
+    peso_actual: '',
+    dias_semana: '',
+    objetivo: '',
+  });
+  const [saving, setSaving] = useState(false);
+
+  const questions = [
+    {
+      title: '¿Entrenás actualmente?',
+      key: 'experiencia',
+      options: [
+        { label: 'Nunca entrené', value: 'nunca' },
+        { label: 'Hace años que no', value: 'hace_anos' },
+        { label: 'Entreno actualmente', value: 'entrena_ahora' },
+      ],
+    },
+    {
+      title: '¿Tenés lesiones o limitaciones?',
+      key: 'lesiones',
+      type: 'text',
+      placeholder: 'Ej: rodilla izquierda, o "ninguna"',
+    },
+    {
+      title: '¿Cuántos años tenés?',
+      key: 'edad',
+      type: 'number',
+      placeholder: '30',
+    },
+    {
+      title: '¿Cuál es tu peso actual? (kg)',
+      key: 'peso_actual',
+      type: 'number',
+      placeholder: '75',
+    },
+    {
+      title: '¿Cuántos días por semana podés entrenar?',
+      key: 'dias_semana',
+      options: [
+        { label: '3 días', value: '3' },
+        { label: '4 días', value: '4' },
+        { label: '5 días', value: '5' },
+        { label: '6 días', value: '6' },
+      ],
+    },
+    {
+      title: '¿Cuál es tu objetivo?',
+      key: 'objetivo',
+      options: [
+        { label: 'Fuerza pura', value: 'fuerza' },
+        { label: 'Hipertrofia (músculo)', value: 'hipertrofia' },
+        { label: 'Resistencia', value: 'resistencia' },
+      ],
+    },
+  ];
+
+  const q = questions[step];
+  const progress = ((step + 1) / questions.length) * 100;
+
+  const handleNext = () => {
+    if (!data[q.key]) {
+      alert(`Por favor respondé la pregunta`);
+      return;
+    }
+    if (step < questions.length - 1) {
+      setStep(step + 1);
+    } else {
+      handleComplete();
+    }
+  };
+
+  const handleComplete = async () => {
+    setSaving(true);
+    try {
+      const { data: user } = await supabase.auth.getUser();
+      if (!user.user) throw new Error('No user');
+      await supabase.from('fit_clients').insert({
+        id: user.user.id,
+        name: nombre,
+        experiencia: data.experiencia,
+        lesiones: data.lesiones || null,
+        edad: parseInt(data.edad) || null,
+        peso_actual: parseFloat(data.peso_actual) || null,
+        dias_semana: parseInt(data.dias_semana) || null,
+        objetivo: data.objetivo,
+        onboarding_completado: true,
+      });
+      // Auto-asignar rutina por defecto (primera disponible por ahora)
+      const { data: routines } = await supabase.from('fit_routines').select('id').limit(1);
+      if (routines?.length) {
+        await supabase.from('fit_routine_assignments').insert({
+          routine_id: routines[0].id,
+          client_id: user.user.id,
+        });
+      }
+      onComplete();
+    } catch (err) {
+      alert('Error al guardar: ' + err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={{ minHeight: '100vh', background: BG, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+      <div style={{ width: '100%', maxWidth: 380 }}>
+        <div style={{ marginBottom: 32 }}>
+          <div style={{ width: '100%', height: 3, background: '#1A1A1A', borderRadius: 2, overflow: 'hidden', marginBottom: 20 }}>
+            <div style={{ width: `${progress}%`, height: '100%', background: ACCENT, transition: 'width 0.3s' }} />
+          </div>
+          <div style={{ fontSize: 12, color: '#888', textAlign: 'center' }}>Pregunta {step + 1} de {questions.length}</div>
+        </div>
+
+        <div style={{ ...s.card, boxShadow: `0 0 40px rgba(200,255,0,0.08)` }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <div className="bebas" style={{ fontSize: 28, color: '#fff' }}>{q.title}</div>
+
+            {q.options ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {q.options.map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setData({ ...data, [q.key]: opt.value })}
+                    style={{
+                      background: data[q.key] === opt.value ? ACCENT : '#1A1A1A',
+                      color: data[q.key] === opt.value ? BG : '#fff',
+                      border: `1px solid ${data[q.key] === opt.value ? ACCENT : BORDER}`,
+                      borderRadius: 12,
+                      padding: 14,
+                      fontSize: 15,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <input
+                type={q.type || 'text'}
+                placeholder={q.placeholder}
+                value={data[q.key]}
+                onChange={e => setData({ ...data, [q.key]: e.target.value })}
+                onKeyDown={e => e.key === 'Enter' && handleNext()}
+                style={{ ...s.input, fontSize: 16, padding: '14px 16px' }}
+              />
+            )}
+
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={() => step > 0 && setStep(step - 1)}
+                disabled={step === 0}
+                style={{ ...s.btnGhost, flex: 1, opacity: step === 0 ? 0.3 : 1 }}
+              >
+                ← Anterior
+              </button>
+              <button
+                onClick={handleNext}
+                disabled={saving}
+                style={{ ...s.btn, flex: 1 }}
+              >
+                {saving ? 'Guardando…' : step === questions.length - 1 ? '✅ Listo' : 'Siguiente →'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── WELCOME VIDEO SCREEN (Interactive Tour) ──────────────────────────────────
+function WelcomeVideoScreen({ nombre, onComplete }) {
+  const [step, setStep] = useState(0);
+
+  const steps = [
+    {
+      title: `Hola ${nombre} 👋`,
+      subtitle: 'Acá entrenaremos juntos.',
+      text: 'Mira cómo funciona todo.',
+      icon: '👋',
+    },
+    {
+      title: 'Esto es tu RACHA 🔥',
+      subtitle: 'Cada día que entrenes suma 1.',
+      text: 'Tu meta: no romperla.',
+      icon: '🔥',
+    },
+    {
+      title: 'Estos son tus PUNTOS 💪',
+      subtitle: '50 XP por cada entreno.',
+      text: 'Desbloquea logros con ellos.',
+      icon: '⭐',
+    },
+    {
+      title: 'Tus LOGROS 🏆',
+      subtitle: '7 días racha, 10 entrenamientos, etc.',
+      text: 'Yo voy a estar mirando cada paso tuyo.',
+      icon: '🏆',
+    },
+    {
+      title: '¿Listo?',
+      subtitle: 'Ahora vas a tu primer entreno.',
+      text: 'Yo me encargo del resto.',
+      icon: '💪',
+    },
+  ];
+
+  const s_step = steps[step];
+  const isLast = step === steps.length - 1;
+
+  return (
+    <div style={{ minHeight: '100vh', background: BG, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+      <div style={{ width: '100%', maxWidth: 420, textAlign: 'center' }}>
+        <div style={{ fontSize: 80, marginBottom: 24, animation: 'pulse-glow 2s infinite' }}>{s_step.icon}</div>
+        <div className="bebas" style={{ fontSize: 36, color: ACCENT, marginBottom: 8 }}>{s_step.title}</div>
+        <div style={{ fontSize: 18, color: '#ccc', marginBottom: 16 }}>{s_step.subtitle}</div>
+        <div style={{ fontSize: 14, color: '#888', marginBottom: 40, lineHeight: 1.6 }}>{s_step.text}</div>
+
+        <div style={{ display: 'flex', gap: 12, marginBottom: 24 }}>
+          {steps.map((_, i) => (
+            <div
+              key={i}
+              style={{
+                flex: 1,
+                height: 4,
+                background: i <= step ? ACCENT : '#1A1A1A',
+                borderRadius: 2,
+                transition: 'background 0.3s',
+              }}
+            />
+          ))}
+        </div>
+
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button
+            onClick={() => step > 0 && setStep(step - 1)}
+            disabled={step === 0}
+            style={{ ...s.btnGhost, flex: 1, opacity: step === 0 ? 0.3 : 1 }}
+          >
+            ← Anterior
+          </button>
+          <button
+            onClick={() => (isLast ? onComplete() : setStep(step + 1))}
+            style={{ ...s.btn, flex: 1 }}
+          >
+            {isLast ? '✅ Entrar a entrenar' : 'Siguiente →'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── LOGIN SCREEN ──────────────────────────────────────────────────────────────
+function LoginScreen() {
+  return <SignupScreen onSignupComplete={() => {}} />;
 }
 
 // ─── STUDENT APP (post-login) ──────────────────────────────────────────────────
@@ -1390,6 +1716,8 @@ export default function App() {
   const [session, setSession] = useState(null);
   const [booted, setBooted] = useState(false);
   const [adminView, setAdminView] = useState('panel');
+  const [clientData, setClientData] = useState(null);
+  const [signupData, setSignupData] = useState(null); // { email, nombre } after signup
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -1402,6 +1730,13 @@ export default function App() {
     return () => listener.subscription.unsubscribe();
   }, []);
 
+  useEffect(() => {
+    if (!session?.user?.id) return;
+    supabase.from('fit_clients').select('*').eq('id', session.user.id).single()
+      .then(({ data }) => setClientData(data || null))
+      .catch(() => setClientData(null));
+  }, [session?.user?.id]);
+
   const handleLogout = () => supabase.auth.signOut();
 
   if (!booted) return (
@@ -1412,12 +1747,54 @@ export default function App() {
 
   const isAdmin = session?.user?.email === ADMIN_EMAIL;
 
+  // Flow: SignupScreen → OnboardingScreen → WelcomeVideoScreen → App
+  if (!session) {
+    return (
+      <>
+        <FontStyle />
+        <SignupScreen onSignupComplete={(data) => setSignupData(data)} />
+      </>
+    );
+  }
+
+  if (signupData && !clientData) {
+    return (
+      <>
+        <FontStyle />
+        <OnboardingScreen
+          email={signupData.email}
+          nombre={signupData.nombre}
+          onComplete={() => {
+            setSignupData(null);
+            // Reload clientData
+            supabase.from('fit_clients').select('*').eq('id', session.user.id).single()
+              .then(({ data }) => setClientData(data || null));
+          }}
+        />
+      </>
+    );
+  }
+
+  if (clientData && !clientData.video_bienvenida_visto) {
+    return (
+      <>
+        <FontStyle />
+        <WelcomeVideoScreen
+          nombre={clientData.name}
+          onComplete={async () => {
+            await supabase.from('fit_clients').update({ video_bienvenida_visto: true })
+              .eq('id', session.user.id);
+            setClientData({ ...clientData, video_bienvenida_visto: true });
+          }}
+        />
+      </>
+    );
+  }
+
   return (
     <>
       <FontStyle />
-      {!session ? (
-        <LoginScreen />
-      ) : isAdmin && adminView === 'panel' ? (
+      {isAdmin && adminView === 'panel' ? (
         <AdminPanel onLogout={handleLogout} onSwitchToTraining={() => setAdminView('training')} />
       ) : (
         <StudentApp
