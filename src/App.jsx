@@ -1122,7 +1122,8 @@ function RoutineBuilder({ clients, onBack }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {(ex.phases || []).map((phase, pIdx) => {
+                    {Array.from({ length: ex.phases?.length || 0 }).map((_, pIdx) => {
+                      const phase = ex.phases[pIdx] || { reps: '', descanso: '' };
                       // For dropset: force descanso = 0
                       const descanso = ex.type === 'dropset' ? 0 : phase.descanso;
                       return (
