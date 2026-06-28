@@ -730,6 +730,225 @@ function UploadPhotosPanel({ client, onBack, onSave }) {
   );
 }
 
+// ─── ROUTINE BUILDER (coach) ─────────────────────────────────────────────────
+function newExercise() {
+  return { id: `ex_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`, name: '', sets: 4, reps: '8-12', rest: 90, notes: '', video: '' };
+}
+
+function RoutineBuilder({ clients, onBack }) {
+  const [routines, setRoutines] = useState(null);
+  const [assignments, setAssignments] = useState([]); // { routine_id, client_id }
+  const [editing, setEditing] = useState(null); // null | { id?, name, description, days, assignedIds:[] }
+  const [activeDay, setActiveDay] = useState('Lunes');
+  const [saving, setSaving] = useState(false);
+  const weekDays = DAYS.slice(1).concat(DAYS[0]); // Lunes..Sábado, Domingo
+
+  const load = async () => {
+    const [{ data: rts }, { data: asg }] = await Promise.all([
+      supabase.from('fit_routines').select('*').order('created_at', { ascending: false }),
+      supabase.from('fit_routine_assignments').select('routine_id, client_id'),
+    ]);
+    setRoutines(rts || []);
+    setAssignments(asg || []);
+  };
+  useEffect(() => { load(); }, []);
+
+  const startNew = () => {
+    setEditing({ name: '', description: '', days: {}, assignedIds: [] });
+    setActiveDay('Lunes');
+  };
+
+  const startEdit = (r) => {
+    const assignedIds = assignments.filter(a => a.routine_id === r.id).map(a => a.client_id);
+    setEditing({ id: r.id, name: r.name, description: r.description || '', days: r.days || {}, assignedIds });
+    setActiveDay('Lunes');
+  };
+
+  const exercisesFor = (day) => editing.days[day] || [];
+  const setExercisesFor = (day, list) => setEditing({ ...editing, days: { ...editing.days, [day]: list } });
+
+  const addExercise = (day) => setExercisesFor(day, [...exercisesFor(day), newExercise()]);
+  const updateExercise = (day, idx, field, value) => {
+    const list = [...exercisesFor(day)];
+    list[idx] = { ...list[idx], [field]: value };
+    setExercisesFor(day, list);
+  };
+  const removeExercise = (day, idx) => setExercisesFor(day, exercisesFor(day).filter((_, i) => i !== idx));
+
+  const toggleAssign = (clientId) => {
+    const has = editing.assignedIds.includes(clientId);
+    setEditing({ ...editing, assignedIds: has ? editing.assignedIds.filter(id => id !== clientId) : [...editing.assignedIds, clientId] });
+  };
+
+  const deleteRoutine = async (r) => {
+    if (!confirm(`¿Borrar la rutina "${r.name}"? Esto la quita de todos los clientes asignados.`)) return;
+    await supabase.from('fit_routines').delete().eq('id', r.id);
+    await load();
+  };
+
+  const save = async () => {
+    if (!editing.name.trim()) { alert('Ponele un nombre a la rutina'); return; }
+    setSaving(true);
+    // clean empty exercises (no name)
+    const cleanDays = {};
+    for (const [day, list] of Object.entries(editing.days)) {
+      const kept = (list || []).filter(ex => ex.name.trim());
+      if (kept.length) cleanDays[day] = kept;
+    }
+    let routineId = editing.id;
+    if (routineId) {
+      await supabase.from('fit_routines').update({ name: editing.name.trim(), description: editing.description, days: cleanDays }).eq('id', routineId);
+    } else {
+      const { data } = await supabase.from('fit_routines').insert({ name: editing.name.trim(), description: editing.description, days: cleanDays }).select().single();
+      routineId = data?.id;
+    }
+    // sync assignments: delete all, re-insert selected
+    if (routineId) {
+      await supabase.from('fit_routine_assignments').delete().eq('routine_id', routineId);
+      if (editing.assignedIds.length) {
+        await supabase.from('fit_routine_assignments').insert(editing.assignedIds.map(client_id => ({ routine_id: routineId, client_id })));
+      }
+    }
+    setSaving(false);
+    setEditing(null);
+    await load();
+  };
+
+  // ── EDIT VIEW ──
+  if (editing) {
+    const dayExercises = exercisesFor(activeDay);
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <button onClick={() => setEditing(null)} style={{ background: 'none', color: '#888', display: 'flex', alignItems: 'center', gap: 4, fontSize: 13 }}>
+          <ChevronLeft size={16} /> Cancelar
+        </button>
+        <div className="bebas" style={{ fontSize: 26 }}>{editing.id ? 'Editar rutina' : 'Nueva rutina'}</div>
+
+        <div style={s.card}>
+          <label style={{ ...s.label, display: 'block', marginBottom: 6 }}>Nombre de la rutina</label>
+          <input style={{ ...s.input, marginBottom: 14 }} placeholder="Ej: Full Body Grupo 1" value={editing.name} onChange={e => setEditing({ ...editing, name: e.target.value })} />
+          <label style={{ ...s.label, display: 'block', marginBottom: 6 }}>Descripción (opcional)</label>
+          <input style={s.input} placeholder="Ej: 3 días, fuerza e hipertrofia" value={editing.description} onChange={e => setEditing({ ...editing, description: e.target.value })} />
+        </div>
+
+        {/* Asignar clientes */}
+        <div style={s.card}>
+          <div style={{ ...s.label, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}><Users size={14} /> Asignar a clientes</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {(clients || []).map(c => {
+              const on = editing.assignedIds.includes(c.id);
+              return (
+                <button key={c.id} onClick={() => toggleAssign(c.id)} style={{ background: on ? ACCENT : '#1A1A1A', color: on ? BG : '#aaa', border: `1px solid ${on ? ACCENT : BORDER}`, borderRadius: 20, padding: '8px 16px', fontSize: 13, fontWeight: 600 }}>
+                  {on ? '✓ ' : ''}{c.name}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Day tabs */}
+        <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4 }}>
+          {weekDays.map(d => {
+            const count = (editing.days[d] || []).filter(e => e.name.trim()).length;
+            return (
+              <button key={d} onClick={() => setActiveDay(d)} style={{ flexShrink: 0, background: activeDay === d ? ACCENT + '20' : '#1A1A1A', color: activeDay === d ? ACCENT : '#888', border: `1px solid ${activeDay === d ? ACCENT : BORDER}`, borderRadius: 10, padding: '8px 14px', fontSize: 13, fontWeight: 600 }}>
+                {d.slice(0, 3)}{count > 0 ? ` · ${count}` : ''}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Exercises for active day */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {dayExercises.length === 0 && (
+            <div style={{ color: '#555', fontSize: 14, textAlign: 'center', padding: '20px 0' }}>Sin ejercicios para {activeDay}. Agregá el primero 👇</div>
+          )}
+          {dayExercises.map((ex, idx) => (
+            <div key={ex.id} style={s.card}>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+                <input style={{ ...s.input, fontWeight: 700 }} placeholder="Nombre del ejercicio" value={ex.name} onChange={e => updateExercise(activeDay, idx, 'name', e.target.value)} />
+                <button onClick={() => removeExercise(activeDay, idx)} style={{ background: '#2A1A1A', border: '1px solid #4A2A2A', borderRadius: 10, padding: '0 12px', color: '#FF6666', flexShrink: 0 }}><X size={16} /></button>
+              </div>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                <div style={{ flex: 1 }}>
+                  <label style={s.label}>Series</label>
+                  <select value={ex.sets} onChange={e => updateExercise(activeDay, idx, 'sets', parseInt(e.target.value))} style={{ ...s.input, marginTop: 4, fontSize: 14 }}>
+                    {[1, 2, 3, 4, 5, 6].map(n => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={s.label}>Reps</label>
+                  <input style={{ ...s.input, marginTop: 4, fontSize: 14 }} placeholder="8-12" value={ex.reps} onChange={e => updateExercise(activeDay, idx, 'reps', e.target.value)} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={s.label}>Descanso (s)</label>
+                  <input style={{ ...s.input, marginTop: 4, fontSize: 14 }} type="number" placeholder="90" value={ex.rest} onChange={e => updateExercise(activeDay, idx, 'rest', parseInt(e.target.value) || 0)} />
+                </div>
+              </div>
+              <label style={s.label}>Video técnica (URL opcional)</label>
+              <input style={{ ...s.input, marginTop: 4, marginBottom: 8, fontSize: 14 }} placeholder="https://youtube.com/..." value={ex.video} onChange={e => updateExercise(activeDay, idx, 'video', e.target.value)} />
+              <label style={s.label}>Notas (opcional)</label>
+              <input style={{ ...s.input, marginTop: 4, fontSize: 14 }} placeholder="Ej: bajada controlada 3 seg" value={ex.notes} onChange={e => updateExercise(activeDay, idx, 'notes', e.target.value)} />
+            </div>
+          ))}
+          <button onClick={() => addExercise(activeDay)} style={{ ...s.btnGhost, width: '100%' }}>+ Agregar ejercicio a {activeDay}</button>
+        </div>
+
+        <button onClick={save} disabled={saving} style={{ ...s.btn, marginTop: 8 }}>
+          {saving ? 'Guardando…' : '✅ Guardar rutina'}
+        </button>
+      </div>
+    );
+  }
+
+  // ── LIST VIEW ──
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <button onClick={onBack} style={{ background: 'none', color: '#888', display: 'flex', alignItems: 'center', gap: 4, fontSize: 13 }}>
+        <ChevronLeft size={16} /> Volver
+      </button>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="bebas" style={{ fontSize: 26 }}>Mis rutinas</div>
+        <button onClick={startNew} style={{ ...s.btnGhost, padding: '8px 14px', fontSize: 13 }}>+ Nueva</button>
+      </div>
+
+      {routines === null ? (
+        <div style={{ color: '#666' }}>Cargando…</div>
+      ) : routines.length === 0 ? (
+        <EmptyState icon={Dumbbell} title="Sin rutinas todavía" message="Creá tu primera rutina y asignala a tus clientes" />
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {routines.map(r => {
+            const assignedNames = assignments.filter(a => a.routine_id === r.id)
+              .map(a => (clients || []).find(c => c.id === a.client_id)?.name).filter(Boolean);
+            const dayCount = Object.values(r.days || {}).filter(l => (l || []).length).length;
+            return (
+              <div key={r.id} style={s.card}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 700, fontSize: 16 }}>{r.name}</div>
+                    {r.description && <div style={{ fontSize: 13, color: '#888', marginTop: 2 }}>{r.description}</div>}
+                    <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                      <Pill label={`${dayCount} días`} />
+                      {assignedNames.length > 0
+                        ? <Pill label={assignedNames.join(', ')} color="#4ECDC4" />
+                        : <Pill label="Sin asignar" color="#FF6B6B" />}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                    <button onClick={() => startEdit(r)} style={{ ...s.btnGhost, padding: '8px 12px', fontSize: 12 }}>Editar</button>
+                    <button onClick={() => deleteRoutine(r)} style={{ background: '#2A1A1A', border: '1px solid #4A2A2A', borderRadius: 10, padding: '8px 10px', color: '#FF6666' }}><X size={14} /></button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── ADMIN PANEL (coach) ───────────────────────────────────────────────────────
 const GROUPS = {
   '1': { name: 'Grupo 1 (6-7 AM)', clients: ['01b2d8eb-479c-413b-a32b-d0071c8531c5', '390f8357-0b79-42ce-b086-431c1ddc0798', '31c6e03c-81e2-49d5-b315-83e72628c6b3'] }, // Vero, Ale, Albert
@@ -815,7 +1034,11 @@ function AdminPanel({ onLogout, onSwitchToTraining }) {
         {/* VISTA: Grupos */}
         {view === 'groups' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div style={{ ...s.label, display: 'flex', alignItems: 'center', gap: 6 }}><Users size={14} /> Mis grupos</div>
+            <button onClick={() => setView('routines')} style={{ ...s.card, display: 'flex', justifyContent: 'space-between', alignItems: 'center', textAlign: 'left', color: BG, background: ACCENT, borderColor: ACCENT }}>
+              <span style={{ fontWeight: 700, fontSize: 15, display: 'flex', alignItems: 'center', gap: 8 }}><Dumbbell size={18} /> Crear / editar rutinas</span>
+              <ChevronLeft size={16} style={{ transform: 'rotate(180deg)', color: BG }} />
+            </button>
+            <div style={{ ...s.label, display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}><Users size={14} /> Mis grupos</div>
             {Object.entries(GROUPS).map(([id, group]) => (
               <button key={id} onClick={() => openGroup(id)} style={{ ...s.card, display: 'flex', justifyContent: 'space-between', alignItems: 'center', textAlign: 'left', color: '#fff' }}>
                 <span style={{ fontWeight: 700, fontSize: 15 }}>{group.name}</span>
@@ -823,6 +1046,11 @@ function AdminPanel({ onLogout, onSwitchToTraining }) {
               </button>
             ))}
           </div>
+        )}
+
+        {/* VISTA: Rutinas */}
+        {view === 'routines' && (
+          <RoutineBuilder clients={clients} onBack={() => setView('groups')} />
         )}
 
         {/* VISTA: Clientes del grupo */}
