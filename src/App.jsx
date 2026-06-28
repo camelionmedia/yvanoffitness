@@ -244,6 +244,19 @@ function WorkoutSession({ exercises, clientId, onComplete, onCancel }) {
   const completePhase = () => {
     const nextPhases = donePhases + 1;
     setPhasesDone({ ...phasesDone, [ex.id]: nextPhases });
+
+    // Check if superset and all phases done
+    if (nextPhases >= totalPhases && ex.type === 'superset' && ex.linkedExerciseId) {
+      // Find the linked exercise and jump to it
+      const linkedIdx = exercises.findIndex(e => e.id === ex.linkedExerciseId);
+      if (linkedIdx !== -1) {
+        // Jump to linked exercise, no rest
+        setExIdx(linkedIdx);
+        setResting(false);
+        return;
+      }
+    }
+
     if (nextPhases < totalPhases) {
       const nextRestTime = parseInt(phases[nextPhases].descanso) || 60;
       setRestTime(nextRestTime);
@@ -309,16 +322,17 @@ function WorkoutSession({ exercises, clientId, onComplete, onCancel }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
           <div>
             <div style={{ ...s.label, marginBottom: 4 }}>Ejercicio {exProgress} de {totalExercises}</div>
-            <div className="bebas" style={{ fontSize: 26, color: ACCENT }}>
-              {ex.type && ex.type !== 'normal' ? (
-                <>
-                  {ex.type === 'dropset' && '💧 '}
-                  {ex.type === 'pyramid' && '🔺 '}
-                  {ex.type === 'superset' && '🔗 '}
-                  {ex.type === 'rest-pause' && '⏸️ '}
-                </>
-              ) : null}
-              {ex.name}
+            <div>
+              <div className="bebas" style={{ fontSize: 26, color: ACCENT }}>
+                {ex.type === 'dropset' && '💧 '}
+                {ex.type === 'superset' && '🔗 '}
+                {ex.name}
+              </div>
+              {ex.type === 'superset' && ex.linkedExerciseId && (
+                <div style={{ fontSize: 12, color: '#88CC00', marginTop: 4 }}>
+                  + {exercises.find(e => e.id === ex.linkedExerciseId)?.name || 'Siguiente'} (sin descanso)
+                </div>
+              )}
             </div>
           </div>
           <div style={{ background: ACCENT + '20', borderRadius: 8, padding: '6px 12px', fontSize: 12, fontWeight: 700, color: ACCENT }}>
@@ -755,9 +769,10 @@ function newExercise() {
   return {
     id: `ex_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
     name: '',
-    type: 'normal', // 'normal', 'dropset', 'pyramid', 'superset', 'rest-pause'
+    type: 'normal', // 'normal', 'dropset', 'superset'
     video: '',
     notes: '',
+    linkedExerciseId: null, // if type === 'superset', link to next exercise
     phases: [
       { peso: '', reps: '', descanso: '' },
       { peso: '', reps: '', descanso: '' },
@@ -943,12 +958,42 @@ function RoutineBuilder({ clients, onBack }) {
                   <select value={ex.type || 'normal'} onChange={e => updateExercise(activeDay, idx, 'type', e.target.value)} style={{ ...s.input, marginTop: 4, fontSize: 14 }}>
                     <option value="normal">Normal</option>
                     <option value="dropset">💧 Dropset</option>
-                    <option value="pyramid">🔺 Piramidal</option>
                     <option value="superset">🔗 Superset</option>
-                    <option value="rest-pause">⏸️ Rest-Pause</option>
                   </select>
                 </div>
               </div>
+
+              {/* Tooltips */}
+              {ex.type === 'dropset' && (
+                <div style={{ background: '#1A2A1A', border: `1px solid ${ACCENT}40`, borderRadius: 8, padding: '10px 12px', fontSize: 12, color: '#88CC00', marginBottom: 12 }}>
+                  💧 <strong>Dropset:</strong> Mismo ejercicio, bajas peso entre fases, SIN descanso entre ellas. Ej: 20kg × 10 → 15kg × 15 → 10kg × 20
+                </div>
+              )}
+              {ex.type === 'superset' && (
+                <div style={{ background: '#1A2A1A', border: `1px solid ${ACCENT}40`, borderRadius: 8, padding: '10px 12px', fontSize: 12, color: '#88CC00', marginBottom: 12 }}>
+                  🔗 <strong>Superset:</strong> DOS ejercicios diferentes, uno tras otro SIN descanso. Selecciona el próximo ejercicio abajo.
+                </div>
+              )}
+
+              {/* Superset: Select linked exercise */}
+              {ex.type === 'superset' && (
+                <div style={{ marginBottom: 12 }}>
+                  <label style={s.label}>Ejercicio siguiente (vinculado)</label>
+                  <select
+                    value={ex.linkedExerciseId || ''}
+                    onChange={e => updateExercise(activeDay, idx, 'linkedExerciseId', e.target.value)}
+                    style={{ ...s.input, marginTop: 4, fontSize: 14 }}
+                  >
+                    <option value="">-- Selecciona un ejercicio --</option>
+                    {dayExercises.map((e, i) => (
+                      i !== idx && e.name && (
+                        <option key={e.id} value={e.id}>{e.name}</option>
+                      )
+                    ))}
+                  </select>
+                  {!ex.linkedExerciseId && <div style={{ fontSize: 12, color: '#FF6666', marginTop: 6 }}>⚠️ Debes seleccionar un ejercicio para que el superset funcione</div>}
+                </div>
+              )}
 
               {/* Fases table */}
               <label style={s.label}>Fases</label>
