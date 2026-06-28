@@ -822,35 +822,42 @@ function newExercise() {
 function validateExercise(ex, allExercises) {
   const errors = [];
 
-  if (!ex.name || !ex.name.trim()) errors.push('Nombre del ejercicio requerido');
+  if (!ex || !ex.name || !ex.name.trim()) errors.push('Nombre del ejercicio requerido');
 
-  if (!ex.phases || ex.phases.length === 0) errors.push('Mínimo 1 fase requerida');
+  const phases = ex?.phases || [];
+  if (phases.length === 0) errors.push('Mínimo 1 fase requerida');
 
   // Validate all phases have reps
-  ex.phases.forEach((p, i) => {
-    if (!p.reps || !p.reps.toString().trim()) errors.push(`Fase ${i + 1}: Reps requeridos`);
-  });
+  if (phases.length > 0) {
+    phases.forEach((p, i) => {
+      if (!p || !p.reps || !p.reps.toString().trim()) errors.push(`Fase ${i + 1}: Reps requeridos`);
+    });
+  }
 
   // Dropset: validate no rest between phases
-  if (ex.type === 'dropset') {
-    ex.phases.forEach((p, i) => {
-      const descanso = parseInt(p.descanso) || 0;
-      if (descanso > 0) errors.push(`Fase ${i + 1}: Dropset debe tener 0s descanso`);
+  if (ex?.type === 'dropset' && phases.length > 0) {
+    phases.forEach((p, i) => {
+      if (p) {
+        const descanso = parseInt(p.descanso) || 0;
+        if (descanso > 0) errors.push(`Fase ${i + 1}: Dropset debe tener 0s descanso`);
+      }
     });
   }
 
   // Superset: validate linked exercise
-  if (ex.type === 'superset') {
+  if (ex?.type === 'superset') {
     if (!ex.linkedExerciseId) errors.push('Superset: Selecciona un ejercicio vinculado');
 
-    const linkedEx = allExercises.find(e => e.id === ex.linkedExerciseId);
-    if (ex.linkedExerciseId && !linkedEx) errors.push('Superset: Ejercicio vinculado no existe');
+    if (ex.linkedExerciseId && allExercises) {
+      const linkedEx = allExercises.find(e => e?.id === ex.linkedExerciseId);
+      if (ex.linkedExerciseId && !linkedEx) errors.push('Superset: Ejercicio vinculado no existe');
 
-    if (ex.linkedExerciseId === ex.id) errors.push('Superset: No puedes vincular consigo mismo');
+      if (ex.linkedExerciseId === ex.id) errors.push('Superset: No puedes vincular consigo mismo');
 
-    // Superset: both must have same phase count
-    if (linkedEx && linkedEx.phases?.length !== ex.phases?.length) {
-      errors.push(`Superset: Ambos ejercicios deben tener ${ex.phases?.length} fases (${linkedEx.name} tiene ${linkedEx.phases?.length})`);
+      // Superset: both must have same phase count
+      if (linkedEx && linkedEx.phases?.length !== phases.length) {
+        errors.push(`Superset: Ambos ejercicios deben tener ${phases.length} fases (${linkedEx.name} tiene ${linkedEx.phases?.length})`);
+      }
     }
   }
 
