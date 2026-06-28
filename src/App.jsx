@@ -428,7 +428,14 @@ function WorkoutSession({ exercises, clientId, onComplete, onCancel }) {
 // ─── STUDENT HOME (today) ──────────────────────────────────────────────────────
 function StudentHome({ client, routine, todayLog, allLogs, onStartWorkout }) {
   const today = DAYS[new Date().getDay()];
-  const todayExercises = routine?.days?.[today] || [];
+  // Filter out exercises that are linked as superset (they should only appear as part of superset)
+  const allTodayExercises = routine?.days?.[today] || [];
+  const linkedExerciseIds = new Set(
+    allTodayExercises
+      .filter(ex => ex.type === 'superset' && ex.linkedExerciseId)
+      .map(ex => ex.linkedExerciseId)
+  );
+  const todayExercises = allTodayExercises.filter(ex => !linkedExerciseIds.has(ex.id));
   const streak = calculateStreak(allLogs);
   const points = allLogs.length * 50;
   const achievements = unlockedAchievements(allLogs);
@@ -1630,6 +1637,7 @@ function OnboardingScreen({ email, nombre, onComplete }) {
         dias_semana: parseInt(data.dias_semana) || null,
         objetivo: data.objetivo,
         onboarding_completado: true,
+        video_bienvenida_visto: true,
       });
       // Auto-asignar rutina por defecto (primera disponible por ahora)
       const { data: routines } = await supabase.from('fit_routines').select('id').limit(1);
@@ -1851,7 +1859,14 @@ function StudentApp({ session, onLogout, headerExtra }) {
   }, [session]);
 
   const today = DAYS[new Date().getDay()];
-  const todayExercises = routine?.days?.[today] || [];
+  // Filter out exercises that are linked as superset (they should only appear as part of superset)
+  const allTodayExercises = routine?.days?.[today] || [];
+  const linkedExerciseIds = new Set(
+    allTodayExercises
+      .filter(ex => ex.type === 'superset' && ex.linkedExerciseId)
+      .map(ex => ex.linkedExerciseId)
+  );
+  const todayExercises = allTodayExercises.filter(ex => !linkedExerciseIds.has(ex.id));
 
   const tabs = [
     { id: 'home', label: 'Hoy', icon: Dumbbell },
@@ -1995,21 +2010,8 @@ export default function App() {
     );
   }
 
-  if (clientData && !clientData.video_bienvenida_visto) {
-    return (
-      <>
-        <FontStyle />
-        <WelcomeVideoScreen
-          nombre={clientData.name}
-          onComplete={async () => {
-            await supabase.from('fit_clients').update({ video_bienvenida_visto: true })
-              .eq('id', session.user.id);
-            setClientData({ ...clientData, video_bienvenida_visto: true });
-          }}
-        />
-      </>
-    );
-  }
+  // Welcome screen is now shown once during onboarding and marked as viewed
+  // No need to show it again after signup
 
   return (
     <>
