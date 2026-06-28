@@ -822,42 +822,12 @@ function newExercise() {
 function validateExercise(ex, allExercises) {
   const errors = [];
 
+  // Only validate essential fields
   if (!ex || !ex.name || !ex.name.trim()) errors.push('Nombre del ejercicio requerido');
 
-  const phases = ex?.phases || [];
-  if (phases.length === 0) errors.push('Mínimo 1 serie requerida');
-
-  // Validate at least ONE serie has reps (don't require ALL to be filled)
-  const nonEmptyPhases = phases.filter(p => p && p.reps);
-  if (phases.length > 0 && nonEmptyPhases.length === 0) {
-    errors.push('Al menos 1 serie debe tener reps definidos');
-  }
-
-  // Dropset: validate no rest between phases
-  if (ex?.type === 'dropset' && phases.length > 0) {
-    phases.forEach((p, i) => {
-      if (p) {
-        const descanso = parseInt(p.descanso) || 0;
-        if (descanso > 0) errors.push(`serie ${i + 1}: Dropset debe tener 0s descanso`);
-      }
-    });
-  }
-
-  // Superset: validate linked exercise
+  // Superset-only validation: must have linked exercise
   if (ex?.type === 'superset') {
     if (!ex.linkedExerciseId) errors.push('Superset: Selecciona un ejercicio vinculado');
-
-    if (ex.linkedExerciseId && allExercises) {
-      const linkedEx = allExercises.find(e => e?.id === ex.linkedExerciseId);
-      if (ex.linkedExerciseId && !linkedEx) errors.push('Superset: Ejercicio vinculado no existe');
-
-      if (ex.linkedExerciseId === ex.id) errors.push('Superset: No puedes vincular consigo mismo');
-
-      // Superset: both must have same phase count
-      if (linkedEx && linkedEx.phases?.length !== phases.length) {
-        errors.push(`Superset: Ambos ejercicios deben tener ${phases.length} series (${linkedEx.name} tiene ${linkedEx.phases?.length})`);
-      }
-    }
   }
 
   return errors;
