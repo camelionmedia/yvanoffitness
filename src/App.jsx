@@ -827,9 +827,10 @@ function validateExercise(ex, allExercises) {
   const phases = ex?.phases || [];
   if (phases.length === 0) errors.push('Mínimo 1 fase requerida');
 
-  // Validate all phases have reps
-  if (phases.length > 0) {
-    phases.forEach((p, i) => {
+  // Validate all phases have reps (only count non-empty phases)
+  const nonEmptyPhases = phases.filter(p => p && (p.reps || p.descanso));
+  if (nonEmptyPhases.length > 0) {
+    nonEmptyPhases.forEach((p, i) => {
       if (!p || !p.reps || !p.reps.toString().trim()) errors.push(`Fase ${i + 1}: Reps requeridos`);
     });
   }
