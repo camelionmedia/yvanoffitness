@@ -337,7 +337,7 @@ function WorkoutSession({ exercises, clientId, onComplete, onCancel }) {
             </div>
           </div>
           <div style={{ background: ACCENT + '20', borderRadius: 8, padding: '6px 12px', fontSize: 12, fontWeight: 700, color: ACCENT }}>
-            {donePhases}/{totalPhases} fase{totalPhases > 1 ? 's' : ''}
+            {donePhases}/{totalPhases} serie{totalPhases > 1 ? 's' : ''}
           </div>
         </div>
 
@@ -398,12 +398,12 @@ function WorkoutSession({ exercises, clientId, onComplete, onCancel }) {
         {/* Instruction based on exercise type */}
         {ex.type === 'dropset' && (
           <div style={{ background: '#2A2A1A', border: '1px solid #FF6666', borderRadius: 10, padding: '12px', fontSize: 12, color: '#FF8888', marginBottom: 16, fontWeight: 700 }}>
-            ⚡ DROPSET: Completa esta fase y baja el peso para la siguiente SIN DESCANSO
+            ⚡ DROPSET: Completa esta serie y baja el peso para la siguiente SIN DESCANSO
           </div>
         )}
         {ex.type === 'superset' && ex.linkedExerciseId && (
           <div style={{ background: '#1A2A1A', border: `1px solid ${ACCENT}40`, borderRadius: 10, padding: '12px', fontSize: 12, color: '#88CC00', marginBottom: 16, fontWeight: 700 }}>
-            🔗 SUPERSET: Completa esta fase y pasa INMEDIATAMENTE a <strong>{exercises.find(e => e.id === ex.linkedExerciseId)?.name}</strong> SIN DESCANSO
+            🔗 SUPERSET: Completa esta serie y pasa INMEDIATAMENTE a <strong>{exercises.find(e => e.id === ex.linkedExerciseId)?.name}</strong> SIN DESCANSO
           </div>
         )}
         {ex.type === 'normal' && (
@@ -416,7 +416,7 @@ function WorkoutSession({ exercises, clientId, onComplete, onCancel }) {
           <RestTimer seconds={restTime} onDone={() => { setResting(false); }} />
         ) : donePhases < totalPhases ? (
           <button style={{ ...s.btn, fontSize: 16, padding: '16px', boxShadow: `0 0 20px rgba(200,255,0,0.3)` }} onClick={completePhase}>
-            {ex.type === 'dropset' ? '✓ Fase ' + (donePhases + 1) + ' lista - Baja peso' : ex.type === 'superset' ? '✓ Pasa al siguiente' : '✓ Fase ' + (donePhases + 1) + ' completada'}
+            {ex.type === 'dropset' ? '✓ serie ' + (donePhases + 1) + ' lista - Baja peso' : ex.type === 'superset' ? '✓ Pasa al siguiente' : '✓ serie ' + (donePhases + 1) + ' completada'}
           </button>
         ) : exIdx < exercises.length - 1 ? (
           <button style={{ ...s.btn, background: ACCENT, fontSize: 16, padding: '16px' }} onClick={() => setNextExScreen(true)}>
@@ -825,14 +825,12 @@ function validateExercise(ex, allExercises) {
   if (!ex || !ex.name || !ex.name.trim()) errors.push('Nombre del ejercicio requerido');
 
   const phases = ex?.phases || [];
-  if (phases.length === 0) errors.push('Mínimo 1 fase requerida');
+  if (phases.length === 0) errors.push('Mínimo 1 serie requerida');
 
-  // Validate all phases have reps (only count non-empty phases)
-  const nonEmptyPhases = phases.filter(p => p && (p.reps || p.descanso));
-  if (nonEmptyPhases.length > 0) {
-    nonEmptyPhases.forEach((p, i) => {
-      if (!p || !p.reps || !p.reps.toString().trim()) errors.push(`Fase ${i + 1}: Reps requeridos`);
-    });
+  // Validate at least ONE serie has reps (don't require ALL to be filled)
+  const nonEmptyPhases = phases.filter(p => p && p.reps);
+  if (phases.length > 0 && nonEmptyPhases.length === 0) {
+    errors.push('Al menos 1 serie debe tener reps definidos');
   }
 
   // Dropset: validate no rest between phases
@@ -840,7 +838,7 @@ function validateExercise(ex, allExercises) {
     phases.forEach((p, i) => {
       if (p) {
         const descanso = parseInt(p.descanso) || 0;
-        if (descanso > 0) errors.push(`Fase ${i + 1}: Dropset debe tener 0s descanso`);
+        if (descanso > 0) errors.push(`serie ${i + 1}: Dropset debe tener 0s descanso`);
       }
     });
   }
@@ -857,7 +855,7 @@ function validateExercise(ex, allExercises) {
 
       // Superset: both must have same phase count
       if (linkedEx && linkedEx.phases?.length !== phases.length) {
-        errors.push(`Superset: Ambos ejercicios deben tener ${phases.length} fases (${linkedEx.name} tiene ${linkedEx.phases?.length})`);
+        errors.push(`Superset: Ambos ejercicios deben tener ${phases.length} series (${linkedEx.name} tiene ${linkedEx.phases?.length})`);
       }
     }
   }
@@ -1049,7 +1047,7 @@ function RoutineBuilder({ clients, onBack }) {
               {/* Tooltips */}
               {ex.type === 'dropset' && (
                 <div style={{ background: '#1A2A1A', border: `1px solid ${ACCENT}40`, borderRadius: 8, padding: '10px 12px', fontSize: 12, color: '#88CC00', marginBottom: 12 }}>
-                  💧 <strong>Dropset:</strong> Mismo ejercicio, bajas peso entre fases, SIN descanso entre ellas. Ej: 20kg × 10 → 15kg × 15 → 10kg × 20
+                  💧 <strong>Dropset:</strong> Mismo ejercicio, bajas peso entre series, SIN descanso entre ellas. Ej: 20kg × 10 → 15kg × 15 → 10kg × 20
                 </div>
               )}
               {ex.type === 'superset' && (
@@ -1098,7 +1096,7 @@ function RoutineBuilder({ clients, onBack }) {
                 const linked = dayExercises.find(e => e.id === ex.linkedExerciseId);
                 return linked ? (
                   <div style={{ background: '#1A2A1A', border: `1px solid ${ACCENT}40`, borderRadius: 8, padding: '10px 12px', marginBottom: 12, fontSize: 12, color: '#88CC00' }}>
-                    🔗 Superset vinculado: <strong>{linked.name}</strong> ({linked.phases?.length || 0} fases)
+                    🔗 Superset vinculado: <strong>{linked.name}</strong> ({linked.phases?.length || 0} series)
                   </div>
                 ) : null;
               })()}
@@ -1106,7 +1104,7 @@ function RoutineBuilder({ clients, onBack }) {
               {/* Number of phases selector */}
               <div style={{ marginBottom: 12 }}>
                 <label style={s.label}>
-                  ¿Cuántas fases?
+                  ¿Cuántas series?
                   {ex.type === 'superset' && ' (ambos ejercicios)'}
                 </label>
                 <select
@@ -1131,20 +1129,20 @@ function RoutineBuilder({ clients, onBack }) {
                   }}
                   style={{ ...s.input, marginTop: 4, fontSize: 14 }}
                 >
-                  {[1, 2, 3, 4, 5, 6].map(n => <option key={n} value={n}>{n} {n === 1 ? 'fase' : 'fases'}</option>)}
+                  {[1, 2, 3, 4, 5, 6].map(n => <option key={n} value={n}>{n} {n === 1 ? 'serie' : 'series'}</option>)}
                 </select>
               </div>
 
-              {/* Fases table (reps and descanso only) */}
+              {/* series table (reps and descanso only) */}
               <label style={s.label}>
-                Detalles de cada fase
+                Detalles de cada serie
                 {ex.type === 'dropset' && ' ⚡ (SIN descanso)'}
               </label>
               <div style={{ marginBottom: 12, overflowX: 'auto', borderRadius: 8, border: `1px solid ${BORDER}` }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                   <thead>
                     <tr style={{ background: '#1A1A1A' }}>
-                      <th style={{ padding: '8px', textAlign: 'left', color: '#888', fontWeight: 600, borderRight: `1px solid ${BORDER}` }}>Fase</th>
+                      <th style={{ padding: '8px', textAlign: 'left', color: '#888', fontWeight: 600, borderRight: `1px solid ${BORDER}` }}>serie</th>
                       <th style={{ padding: '8px', textAlign: 'left', color: '#888', fontWeight: 600, borderRight: `1px solid ${BORDER}` }}>Reps</th>
                       <th style={{ padding: '8px', textAlign: 'left', color: '#888', fontWeight: 600 }}>
                         {ex.type === 'dropset' ? '⚡ Descanso' : 'Descanso (s)'}
