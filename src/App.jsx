@@ -1776,13 +1776,21 @@ function OnboardingScreen({ email, nombre, onComplete }) {
         onboarding_completado: true,
         video_bienvenida_visto: true,
       });
-      // Auto-asignar rutina por defecto (primera disponible por ahora)
-      const { data: routines } = await supabase.from('fit_routines').select('id').limit(1);
-      if (routines?.length) {
-        await supabase.from('fit_routine_assignments').insert({
-          routine_id: routines[0].id,
-          client_id: user.user.id,
-        });
+      // Auto-asignar rutina según experiencia
+      const routineMap = {
+        'nunca': 'Full Body - Principiantes',
+        'hace_anos': 'Rutina Intermedios',
+        'entrena_ahora': 'Rutina Avanzados 1',
+      };
+      const targetRoutine = routineMap[data.experiencia];
+      if (targetRoutine) {
+        const { data: routines } = await supabase.from('fit_routines').select('id').eq('name', targetRoutine).single();
+        if (routines?.id) {
+          await supabase.from('fit_routine_assignments').insert({
+            routine_id: routines.id,
+            client_id: user.user.id,
+          });
+        }
       }
       onComplete();
     } catch (err) {
